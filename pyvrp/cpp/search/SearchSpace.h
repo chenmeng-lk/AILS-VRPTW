@@ -76,6 +76,10 @@ public:
      */
     void markPromising(Route::Node const *node);
 
+    void unmarkPromising(size_t client);
+
+    void unmarkPromising(Route::Node const *node);
+    
     /**
      * Marks all clients as promising.
      */

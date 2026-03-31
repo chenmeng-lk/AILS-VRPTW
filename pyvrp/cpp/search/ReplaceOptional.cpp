@@ -27,7 +27,7 @@ std::pair<pyvrp::Cost, bool> ReplaceOptional::evaluate(
                                             ClientSegment(data, U->idx()),
                                             route->after(V->pos() + 1)));
 
-    return std::make_pair(deltaCost, deltaCost < 0);
+    return std::make_pair(deltaCost, false);
 }
 
 void ReplaceOptional::apply(Route::Node *U, Route::Node *V) const

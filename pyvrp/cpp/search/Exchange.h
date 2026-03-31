@@ -90,7 +90,7 @@ std::pair<Cost, bool> Exchange<N, M>::evalRelocateMove(
     assert(U->pos() > 0);
 
     Cost deltaCost = 0;
-
+    bool exact = false;
     if (U->route() != V->route())
     {
         auto const *uRoute = U->route();
@@ -112,21 +112,21 @@ std::pair<Cost, bool> Exchange<N, M>::evalRelocateMove(
                               uRoute->between(U->pos(), U->pos() + N - 1),
                               vRoute->after(V->pos() + 1));
 
-        costEvaluator.deltaCost(deltaCost, uProposal, vProposal);
+        exact = costEvaluator.deltaCost(deltaCost, uProposal, vProposal);
     }
     else  // within same route
     {
         auto *route = U->route();
 
         if (U->pos() < V->pos())
-            costEvaluator.deltaCost(
+            exact = costEvaluator.deltaCost(
                 deltaCost,
                 Route::Proposal(route->before(U->pos() - 1),
                                 route->between(U->pos() + N, V->pos()),
                                 route->between(U->pos(), U->pos() + N - 1),
                                 route->after(V->pos() + 1)));
         else
-            costEvaluator.deltaCost(
+            exact = costEvaluator.deltaCost(
                 deltaCost,
                 Route::Proposal(route->before(V->pos()),
                                 route->between(U->pos(), U->pos() + N - 1),
@@ -134,7 +134,7 @@ std::pair<Cost, bool> Exchange<N, M>::evalRelocateMove(
                                 route->after(U->pos() + N)));
     }
 
-    return std::make_pair(deltaCost, deltaCost < 0);
+    return std::make_pair(deltaCost, exact);
 }
 
 template <size_t N, size_t M>
@@ -145,7 +145,7 @@ std::pair<Cost, bool> Exchange<N, M>::evalSwapMove(
     assert(U->route() && V->route());
 
     Cost deltaCost = 0;
-
+    bool exact = false;
     if (U->route() != V->route())
     {
         auto const *uRoute = U->route();
@@ -161,14 +161,14 @@ std::pair<Cost, bool> Exchange<N, M>::evalSwapMove(
                               uRoute->between(U->pos(), U->pos() + N - 1),
                               vRoute->after(V->pos() + M));
 
-        costEvaluator.deltaCost(deltaCost, uProposal, vProposal);
+        exact = costEvaluator.deltaCost(deltaCost, uProposal, vProposal);
     }
     else  // within same route
     {
         auto const *route = U->route();
 
         if (U->pos() < V->pos())
-            costEvaluator.deltaCost(
+            exact = costEvaluator.deltaCost(
                 deltaCost,
                 Route::Proposal(route->before(U->pos() - 1),
                                 route->between(V->pos(), V->pos() + M - 1),
@@ -176,7 +176,7 @@ std::pair<Cost, bool> Exchange<N, M>::evalSwapMove(
                                 route->between(U->pos(), U->pos() + N - 1),
                                 route->after(V->pos() + M)));
         else
-            costEvaluator.deltaCost(
+            exact = costEvaluator.deltaCost(
                 deltaCost,
                 Route::Proposal(route->before(V->pos() - 1),
                                 route->between(U->pos(), U->pos() + N - 1),
@@ -185,7 +185,7 @@ std::pair<Cost, bool> Exchange<N, M>::evalSwapMove(
                                 route->after(U->pos() + N)));
     }
 
-    return std::make_pair(deltaCost, deltaCost < 0);
+    return std::make_pair(deltaCost, exact);
 }
 
 template <size_t N, size_t M>

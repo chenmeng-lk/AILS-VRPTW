@@ -80,6 +80,26 @@ void SearchSpace::markPromising(Route::Node const *node)
         markPromising(n(node)->idx());
 }
 
+void SearchSpace::unmarkPromising(size_t client)
+{
+    assert(client < neighbours_.size());
+    promising_[client] = false;
+}
+
+void SearchSpace::unmarkPromising(Route::Node const *node)
+{
+    assert(node->route());
+
+    if (node->isClient())
+        unmarkPromising(node->idx());
+
+    if (!node->isStartDepot() && p(node)->isClient())
+        unmarkPromising(p(node)->idx());
+
+    if (!node->isEndDepot() && n(node)->isClient())
+        unmarkPromising(n(node)->idx());
+}
+
 void SearchSpace::markAllPromising() { promising_.set(); }
 
 void SearchSpace::unmarkAllPromising() { promising_.reset(); }

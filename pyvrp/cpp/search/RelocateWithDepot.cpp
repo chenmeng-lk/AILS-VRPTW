@@ -161,7 +161,7 @@ std::pair<pyvrp::Cost, bool> RelocateWithDepot::evaluate(
         // might be OK to ensure the vehicle returns empty.
         evalDepotAfter(fixedCost, U, V, costEvaluator);
 
-    return std::make_pair(move_.cost, move_.cost < 0);
+    return std::make_pair(move_.cost, false);
 }
 
 void RelocateWithDepot::apply(Route::Node *U, Route::Node *V) const

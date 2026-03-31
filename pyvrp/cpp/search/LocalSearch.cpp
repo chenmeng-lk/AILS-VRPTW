@@ -57,11 +57,12 @@ void LocalSearch::search(CostEvaluator const &costEvaluator)
         return;
 
     searchCompleted_ = false;
+    bool useTsla = false;
     for (int step = 0; !searchCompleted_; ++step)
     {
         PYVRP_DEBUG("pyvrp.search", "Entering search loop (step={}).", step);
         searchCompleted_ = true;
-
+        topKTslaStepOne_.clear();
         for (auto const uClient : searchSpace_.clientOrder())
         {
             auto *U = &solution_.nodes[uClient];
@@ -102,7 +103,181 @@ void LocalSearch::search(CostEvaluator const &costEvaluator)
             if (step > 0 || !U->route())
                 applyEmptyRouteMoves(U, costEvaluator);
         }
+        if (searchCompleted_ && !useTsla)
+        {
+            applyTsla(costEvaluator);
+            useTsla = true;
+        }
     }
+}
+
+void LocalSearch::applyTsla(CostEvaluator const &costEvaluator)
+{
+    const std::vector<TslaStepOne> topK = topKTslaStepOne_.getTopK();
+    if (topK.empty())
+        return;
+    std::vector<bool> routeModified(solution_.routes.size(), false);
+    bool improvedOverall = false;
+    for (auto const &step : topK)
+    {
+        Route::Node *U = step.node1;
+        Route::Node *V = step.node2;
+        Cost deltaCostFirst = step.deltaCost;
+        auto opFirst = step.op;
+        //printf("n1: %d, n2: %d, deltaFirst: %d\n", (int)U->idx(), (int)V->idx(), (int)deltaCostFirst);
+        auto *rU = U->route();
+        auto *rV = V->route();
+        if (!rU || !rV)
+        {
+            continue;
+        }
+        auto *routes = solution_.routes.data();
+        int rUIndex = std::distance(routes, U->route());
+        int rVIndex = std::distance(routes, V->route());
+        if (routeModified[rUIndex] || routeModified[rVIndex])
+        {
+            continue;
+        }
+        bool routeInter = rU != rV;
+        //Save original route information
+        std::vector<Route::Node *> originRouteU;
+        std::vector<Route::Node *> originRouteV;
+        originRouteU.reserve(rU->size());
+        for (auto *node : *rU)
+        {
+            if (!node->isDepot() && !node->isStartDepot() && !node->isEndDepot())
+            {
+                originRouteU.push_back(node);
+            }
+        }
+        if (routeInter)
+        {
+            originRouteV.reserve(rV->size());
+            for (auto *node : *rV)
+            {
+                if (!node->isDepot() && !node->isStartDepot() && !node->isEndDepot())
+                {
+                    originRouteV.push_back(node);
+                }
+            }
+        }
+        size_t currentNumUpdates = numUpdates_;
+        int lastUpdateU = lastUpdate_[rUIndex];
+        int lastUpdateV = lastUpdate_[rVIndex];
+        //Move the first step of the application
+        searchSpace_.markPromising(U);
+        searchSpace_.markPromising(V);
+        routeModified[rUIndex] = true;
+        routeModified[rVIndex] = true;
+        opFirst->apply(U, V);
+        update(rU, rV);
+
+        auto getnearestNeighbors = [this](size_t client, size_t maxNeighbours = 10) -> std::vector<size_t> {
+            std::vector<size_t> neighbors = neighbours()[client];
+            if (neighbors.size() <= maxNeighbours)
+            {
+                return neighbors;
+            }
+            return std::vector<size_t>(neighbors.begin(), neighbors.begin() + maxNeighbours);
+        };
+        //Apply second step
+        bool improved = false;
+        for(auto secondNode1 : *rU)
+        {
+            if (std::abs(int(secondNode1->pos() - U->pos())) > 2)
+            {
+                continue;
+            }
+            if (secondNode1->isDepot() || secondNode1->isStartDepot() || secondNode1->isEndDepot())
+            {
+                continue;
+            }
+            for (auto client2 : getnearestNeighbors(secondNode1->idx()))
+            {
+                auto& secondNode2 = solution_.nodes[client2];
+                if (secondNode2.route() == nullptr || secondNode2.isDepot() || secondNode2.isStartDepot() || secondNode2.isEndDepot())
+                {
+                    continue;
+                }
+                int rIndex1 = std::distance(routes, secondNode1->route());
+                int rIndex2 = std::distance(routes, secondNode2.route());
+                if (applyTslaStepTwo(secondNode1, &secondNode2, deltaCostFirst, costEvaluator))
+                {
+                    improved = true;
+                    improvedOverall = true;
+                    routeModified[rIndex1] = true;
+                    routeModified[rIndex2] = true;
+                }
+                if (improved)
+                    break;
+            }
+            if (improved)
+                break;
+        }
+        if (!improved && routeInter)
+        {
+            for(auto secondNode1 : *rV)
+            {
+                if (std::abs(int(secondNode1->pos() - V->pos())) > 2)
+                {
+                    continue;
+                }
+                if (secondNode1->isDepot() || secondNode1->isStartDepot() || secondNode1->isEndDepot())
+                {
+                    continue;
+                }
+                for (auto client2 : getnearestNeighbors(secondNode1->idx()))
+                {
+                    auto& secondNode2 = solution_.nodes[client2];
+                    if (secondNode2.route() == nullptr || secondNode2.isDepot() || secondNode2.isStartDepot() || secondNode2.isEndDepot())
+                    {
+                        continue;
+                    }
+                    int rIndex1 = std::distance(routes, secondNode1->route());
+                    int rIndex2 = std::distance(routes, secondNode2.route());
+                    if (applyTslaStepTwo(secondNode1, &secondNode2, deltaCostFirst, costEvaluator))
+                    {
+                        improved = true;
+                        improvedOverall = true;
+                        routeModified[rIndex1] = true;
+                        routeModified[rIndex2] = true;
+                    }
+                    if (improved)
+                        break;
+                }
+                if (improved)
+                    break;
+            }
+        }
+        if (!improved)
+        {
+            //Restore the original route information
+            rU->clear();
+            if (routeInter)
+                rV->clear();
+            for (auto *node : originRouteU)
+            {
+                rU->push_back(node);
+            }
+            if (routeInter)
+            {
+                for (auto *node : originRouteV)
+                {
+                    rV->push_back(node);
+                }
+            }
+            update(rU, rV);
+            routeModified[rUIndex] = false;
+            routeModified[rVIndex] = false;
+            searchSpace_.unmarkPromising(U);
+            searchSpace_.unmarkPromising(V);
+            numUpdates_ = currentNumUpdates;
+            lastUpdate_[rUIndex] = lastUpdateU;
+            lastUpdate_[rVIndex] = lastUpdateV;
+        }
+    }
+    searchCompleted_ = !improvedOverall;
+    printf("TSLA finished, improved? %d\n", improvedOverall);
 }
 
 void LocalSearch::shuffle(RandomNumberGenerator &rng)
@@ -164,8 +339,8 @@ bool LocalSearch::applyBinaryOps(Route::Node *U,
 {
     for (auto *op : binaryOps_)
     {
-        auto const [deltaCost, shouldApply] = op->evaluate(U, V, costEvaluator);
-        if (shouldApply)
+        auto const [deltaCost, exact] = op->evaluate(U, V, costEvaluator);
+        if (deltaCost < 0)
         {
             PYVRP_DEBUG("pyvrp.search",
                         "Applying operator to U={} and V={} (delta={}).",
@@ -197,8 +372,53 @@ bool LocalSearch::applyBinaryOps(Route::Node *U,
 
             return true;
         }
+        else if (deltaCost > 0 && exact)
+        {
+            topKTslaStepOne_.saveStepOne(U, V, deltaCost, op);
+        }
     }
 
+    return false;
+}
+
+bool LocalSearch::applyTslaStepTwo(Route::Node *U, 
+                                   Route::Node *V,
+                                   Cost deltaCostFirst,
+                                   CostEvaluator const &costEvaluator)
+{
+    for (auto *op : binaryOps_)
+    {
+        auto const [deltaCostSecond, exact] = op->evaluate(U, V, costEvaluator);
+        if (deltaCostSecond + deltaCostFirst < 0)
+        {
+            PYVRP_DEBUG("pyvrp.search",
+                        "Applying operator to U={} and V={} (delta={}).",
+                        U->idx(),
+                        V->idx(),
+                        deltaCost);
+
+            auto *rU = U->route();
+            auto *rV = V->route();
+            assert(rV);
+
+            if (rU)
+                searchSpace_.markPromising(U);
+            searchSpace_.markPromising(V);
+
+            [[maybe_unused]] auto const costBefore
+                = costEvaluator.penalisedCost(solution_);
+
+            op->apply(U, V);
+            update(rU, rV);
+
+            [[maybe_unused]] auto const costAfter
+                = costEvaluator.penalisedCost(solution_);
+
+            assert(costAfter == costBefore + deltaCostSecond);
+
+            return true;
+        }
+    }
     return false;
 }
 
@@ -366,6 +586,7 @@ LocalSearch::LocalSearch(ProblemData const &data,
       searchSpace_(data, neighbours),
       perturbationManager_(perturbationManager),
       lastTest_(data.numClients()),
-      lastUpdate_(data.numVehicles())
+      lastUpdate_(data.numVehicles()),
+      topKTslaStepOne_(10)
 {
 }

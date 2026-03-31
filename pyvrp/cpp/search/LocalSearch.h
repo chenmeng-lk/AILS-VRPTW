@@ -16,6 +16,54 @@
 
 namespace pyvrp::search
 {
+struct TslaStepOne
+{
+    Route::Node* node1;
+    Route::Node* node2;
+    Cost deltaCost;
+    BinaryOperator* op;
+    TslaStepOne(Route::Node* n1, Route::Node* n2, Cost cost, BinaryOperator* op)
+        : node1(n1), node2(n2), deltaCost(cost), op(op) {}
+};
+
+class TopKTslaStepOne
+{
+private:
+    std::vector<TslaStepOne> topKList;
+    size_t k;
+
+public:
+    explicit TopKTslaStepOne(size_t maxK) : k(maxK) {}
+    void saveStepOne(Route::Node* n1, Route::Node* n2, Cost cost, BinaryOperator* op)
+    {
+        TslaStepOne newItem(n1, n2, cost, op);
+        if (topKList.size() < k) {
+            topKList.push_back(newItem);
+            std::sort(topKList.begin(), topKList.end(), 
+                [](auto const &a, auto const &b) {
+                    return a.deltaCost < b.deltaCost;
+                });
+        } else {
+            if (newItem.deltaCost < topKList.back().deltaCost) {
+                topKList.pop_back();
+                topKList.push_back(newItem);
+                std::sort(topKList.begin(), topKList.end(), 
+                    [](auto const &a, auto const &b) {
+                        return a.deltaCost < b.deltaCost;
+                    });
+            }
+        }
+    }
+
+    std::vector<TslaStepOne> getTopK() const {
+        return topKList;
+    }
+
+    void clear() {
+        topKList.clear();
+    }
+};
+
 class LocalSearch
 {
     ProblemData const &data;
@@ -39,6 +87,7 @@ class LocalSearch
 
     size_t numUpdates_ = 0;         // modification counter
     bool searchCompleted_ = false;  // No further improving move found?
+    TopKTslaStepOne topKTslaStepOne_;
 
     // Tests the node U.
     bool applyUnaryOps(Route::Node *U, CostEvaluator const &costEvaluator);
@@ -47,6 +96,13 @@ class LocalSearch
     bool applyBinaryOps(Route::Node *U,
                         Route::Node *V,
                         CostEvaluator const &costEvaluator);
+
+    bool applyTslaStepTwo(Route::Node *U,
+                          Route::Node *V, 
+                          Cost deltaCostFirst,
+                          CostEvaluator const &costEvaluator);
+
+    void applyTsla(CostEvaluator const &costEvaluator);
 
     // Tests moves involving empty routes.
     void applyEmptyRouteMoves(Route::Node *U,

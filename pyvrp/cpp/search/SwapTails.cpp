@@ -37,7 +37,7 @@ std::pair<pyvrp::Cost, bool> SwapTails::evaluate(
         return std::make_pair(0, false);
 
     Cost deltaCost = 0;
-
+    bool exact = false;
     // We're going to incur fixed cost if a route is currently empty but
     // becomes non-empty due to the proposed move.
     if (uRoute->empty() && !n(V)->isEndDepot())
@@ -65,7 +65,7 @@ std::pair<pyvrp::Cost, bool> SwapTails::evaluate(
                               uRoute->between(U->pos() + 1, uRoute->size() - 2),
                               vRoute->at(vRoute->size() - 1));
 
-        costEvaluator.deltaCost(deltaCost, uProposal, vProposal);
+        exact = costEvaluator.deltaCost(deltaCost, uProposal, vProposal);
     }
     else if (!n(U)->isEndDepot() && n(V)->isEndDepot())
     {
@@ -77,7 +77,7 @@ std::pair<pyvrp::Cost, bool> SwapTails::evaluate(
                               uRoute->between(U->pos() + 1, uRoute->size() - 2),
                               vRoute->at(vRoute->size() - 1));
 
-        costEvaluator.deltaCost(deltaCost, uProposal, vProposal);
+        exact = costEvaluator.deltaCost(deltaCost, uProposal, vProposal);
     }
     else if (n(U)->isEndDepot() && !n(V)->isEndDepot())
     {
@@ -89,10 +89,10 @@ std::pair<pyvrp::Cost, bool> SwapTails::evaluate(
         auto const vProposal = Route::Proposal(vRoute->before(V->pos()),
                                                vRoute->at(vRoute->size() - 1));
 
-        costEvaluator.deltaCost(deltaCost, uProposal, vProposal);
+        exact = costEvaluator.deltaCost(deltaCost, uProposal, vProposal);
     }
 
-    return std::make_pair(deltaCost, deltaCost < 0);
+    return std::make_pair(deltaCost, exact);
 }
 
 void SwapTails::apply(Route::Node *U, Route::Node *V) const

@@ -37,7 +37,7 @@ std::pair<pyvrp::Cost, bool> InsertOptional::evaluate(
                                             ClientSegment(data, U->idx()),
                                             route->after(V->pos() + 1)));
 
-    return std::make_pair(deltaCost, deltaCost < 0);
+    return std::make_pair(deltaCost, false);
 }
 
 void InsertOptional::apply(Route::Node *U, Route::Node *V) const
