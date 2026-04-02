@@ -96,7 +96,11 @@ db.sqlite3
 db.sqlite3-journal
 
 # Flask stuff:
-instance/
+instance/CVRP/XXL
+instance/GVRP
+instance/HFVRP
+instance/MDVRPTW
+instance/SDVRPTW
 .webassets-cache
 
 # Scrapy stuff:

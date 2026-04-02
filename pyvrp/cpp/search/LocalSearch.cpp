@@ -58,6 +58,7 @@ void LocalSearch::search(CostEvaluator const &costEvaluator)
 
     searchCompleted_ = false;
     bool useTsla = false;
+    //printf("enableTsla_: %d\n", enableTsla_);
     for (int step = 0; !searchCompleted_; ++step)
     {
         PYVRP_DEBUG("pyvrp.search", "Entering search loop (step={}).", step);
@@ -103,7 +104,7 @@ void LocalSearch::search(CostEvaluator const &costEvaluator)
             if (step > 0 || !U->route())
                 applyEmptyRouteMoves(U, costEvaluator);
         }
-        if (searchCompleted_ && !useTsla)
+        if (searchCompleted_ && enableTsla_ && !useTsla)
         {
             applyTsla(costEvaluator);
             useTsla = true;
@@ -277,7 +278,7 @@ void LocalSearch::applyTsla(CostEvaluator const &costEvaluator)
         }
     }
     searchCompleted_ = !improvedOverall;
-    printf("TSLA finished, improved? %d\n", improvedOverall);
+    //printf("TSLA finished, improved? %d\n", improvedOverall);
 }
 
 void LocalSearch::shuffle(RandomNumberGenerator &rng)
@@ -372,7 +373,7 @@ bool LocalSearch::applyBinaryOps(Route::Node *U,
 
             return true;
         }
-        else if (deltaCost > 0 && exact)
+        else if (deltaCost > 0 && exact && enableTsla_)
         {
             topKTslaStepOne_.saveStepOne(U, V, deltaCost, op);
         }
@@ -580,6 +581,7 @@ LocalSearch::Statistics LocalSearch::statistics() const
 
 LocalSearch::LocalSearch(ProblemData const &data,
                          SearchSpace::Neighbours neighbours,
+                         bool enableTsla,
                          PerturbationManager &perturbationManager)
     : data(data),
       solution_(data),
@@ -587,6 +589,7 @@ LocalSearch::LocalSearch(ProblemData const &data,
       perturbationManager_(perturbationManager),
       lastTest_(data.numClients()),
       lastUpdate_(data.numVehicles()),
+      enableTsla_(enableTsla),
       topKTslaStepOne_(10)
 {
 }

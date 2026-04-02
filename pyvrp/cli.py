@@ -91,6 +91,8 @@ def _solve(
     per_client: bool,
     stats_dir: Path | None,
     sol_dir: Path | None,
+    enable_tsla: bool = False,
+    disable_tsla: bool = False,
     **kwargs,
 ) -> tuple[str, str, float, int, float]:
     """
@@ -117,6 +119,10 @@ def _solve(
         The directory to write runtime statistics to.
     sol_dir
         The directory to write the best found solutions to.
+    enable_tsla
+        If True, enables TSLA during local search.
+    disable_tsla
+        If True, disables TSLA during local search.
 
     Returns
     -------
@@ -128,6 +134,11 @@ def _solve(
         params = SolveParams.from_file(kwargs["config_loc"])
     else:
         params = SolveParams()
+
+    if enable_tsla:
+        params._enable_tsla = True
+    elif disable_tsla:
+        params._enable_tsla = False
 
     data = read(data_loc, round_func)
 
@@ -242,6 +253,18 @@ def main():
 
     msg = "Seed to use for reproducible results."
     parser.add_argument("--seed", required=True, type=int, help=msg)
+
+    tsla_group = parser.add_mutually_exclusive_group()
+    tsla_group.add_argument(
+        "--enable_tsla",
+        action="store_true",
+        help="Enable TSLA in local search.",
+    )
+    tsla_group.add_argument(
+        "--disable_tsla",
+        action="store_true",
+        help="Disable TSLA in local search.",
+    )
 
     msg = "Number of processors to use for solving instances. Default 1."
     parser.add_argument("--num_procs", type=int, default=1, help=msg)

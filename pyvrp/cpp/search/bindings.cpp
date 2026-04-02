@@ -408,9 +408,11 @@ PYBIND11_MODULE(_search, m)
     py::class_<LocalSearch>(m, "LocalSearch")
         .def(py::init<pyvrp::ProblemData const &,
                       std::vector<std::vector<size_t>>,
+                      bool,
                       PerturbationManager &>(),
              py::arg("data"),
              py::arg("neighbours"),
+             py::arg("enable_tsla") = true,
              py::arg("perturbation_manager") = PerturbationManager(),
              py::keep_alive<1, 2>(),  // keep data alive until LS is freed
              py::keep_alive<1, 4>())  // also keep perturbation_manager alive

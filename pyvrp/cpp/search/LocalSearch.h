@@ -87,6 +87,7 @@ class LocalSearch
 
     size_t numUpdates_ = 0;         // modification counter
     bool searchCompleted_ = false;  // No further improving move found?
+    bool enableTsla_ = true;        // whether TSLA is enabled
     TopKTslaStepOne topKTslaStepOne_;
 
     // Tests the node U.
@@ -201,6 +202,7 @@ public:
 
     LocalSearch(ProblemData const &data,
                 SearchSpace::Neighbours neighbours,
+                bool enableTsla,
                 PerturbationManager &perturbationManager);
 };
 }  // namespace pyvrp::search

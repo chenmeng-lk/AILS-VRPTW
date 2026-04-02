@@ -56,6 +56,7 @@ class SolveParams:
         operators: list[type[UnaryOperator | BinaryOperator]] = OPERATORS,
         display_interval: float = 5.0,
         perturbation: PerturbationParams = PerturbationParams(),
+        enable_tsla: bool = True,
     ):
         self._ils = ils
         self._penalty = penalty
@@ -63,6 +64,7 @@ class SolveParams:
         self._operators = operators
         self._display_interval = display_interval
         self._perturbation = perturbation
+        self._enable_tsla = enable_tsla
 
     def __eq__(self, other: object) -> bool:
         return (
@@ -73,6 +75,7 @@ class SolveParams:
             and self.operators == other.operators
             and self.display_interval == other.display_interval
             and self.perturbation == other.perturbation
+            and self.enable_tsla == other.enable_tsla
         )
 
     @property
@@ -99,6 +102,10 @@ class SolveParams:
     def perturbation(self):
         return self._perturbation
 
+    @property
+    def enable_tsla(self) -> bool:
+        return self._enable_tsla
+
     @classmethod
     def from_file(cls, loc: str | pathlib.Path):
         """
@@ -118,6 +125,7 @@ class SolveParams:
             operators,
             data.get("display_interval", 5.0),
             PerturbationParams(**data.get("perturbation", {})),
+            data.get("enable_tsla", True),
         )
 
 
@@ -163,7 +171,7 @@ def solve(
     rng = RandomNumberGenerator(seed=seed)
     neighbours = compute_neighbours(data, params.neighbourhood)
     perturbation = PerturbationManager(params.perturbation)
-    ls = LocalSearch(data, rng, neighbours, perturbation)
+    ls = LocalSearch(data, rng, neighbours, perturbation, params.enable_tsla)
 
     for op in params.operators:
         if op.supports(data):

@@ -23,9 +23,18 @@ uv run pytest
 uv run buildtools/build_extensions.py
 
 测试实例（round_func dimacs参数把结果成本乘以10输出）
-uv run pyvrp instance/CVRP/X-n1001-k43.vrp --seed 42 --max_runtime 60
-uv run pyvrp instance/VRPTW/C1_10_10.vrp --seed 42 --max_runtime 15
+uv run pyvrp instance/CVRP/X-n1001-k43.vrp --seed 42 --max_runtime 60 --disable_tsla
+uv run pyvrp instance/CVRP/X-n1001-k43.vrp --seed 42 --max_runtime 60 --enable_tsla
+uv run pyvrp instance/VRPTW/C1_10_10.vrp --seed 42 --max_runtime 60 --disable_tsla
+uv run pyvrp instance/VRPTW/C1_10_10.vrp --seed 42 --max_runtime 60 --enable_tsla
 
 uv run pyvrp instance/CVRP/X-n294-k50.vrp --seed 42 --max_runtime 60
 uv run pyvrp instance/VRPTW/C2_10_6.vrp --seed 42 --max_runtime 60
+uv run pyvrp instance/CVRP/XXL/Brussels1.vrp --seed 42 --max_runtime 5 --enable_tsla
 python run_test.py
+# 启用 TSLA
+python3 script.py --dir instance/CVRP --seeds 42 --max_runtime 3 --workers 50 --enable_tsla
+# 禁用 TSLA
+python3 script.py --dir instance/CVRP --dir instance/VRPTW --seeds 42 --max_runtime 3 --workers 30 --enable_tsla
+
+python3 script.py --dir instance/CVRP --seeds 42 --max_runtime 3 --workers 50 --enable_tsla

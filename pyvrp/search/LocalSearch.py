@@ -37,8 +37,9 @@ class LocalSearch:
         rng: RandomNumberGenerator,
         neighbours: list[list[int]],
         perturbation_manager: PerturbationManager = PerturbationManager(),
+        enable_tsla: bool = True,
     ):
-        self._ls = _LocalSearch(data, neighbours, perturbation_manager)
+        self._ls = _LocalSearch(data, neighbours, enable_tsla, perturbation_manager)
         self._rng = rng
 
     def add_operator(self, op: UnaryOperator | BinaryOperator):
