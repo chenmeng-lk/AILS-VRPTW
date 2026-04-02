@@ -441,7 +441,9 @@ PYBIND11_MODULE(_search, m)
              py::arg("cost_evaluator"),
              py::arg("exhaustive") = false,
              py::call_guard<py::gil_scoped_release>())
-        .def("shuffle", &LocalSearch::shuffle, py::arg("rng"));
+        .def("shuffle", &LocalSearch::shuffle, py::arg("rng"))
+        .def("set_use_tsla", &LocalSearch::setUseTsla, py::arg("use_tsla"))
+        .def("get_use_tsla", &LocalSearch::getUseTsla);
 
     py::class_<Solution>(m, "Solution", DOC(pyvrp, search, Solution))
         .def(py::init<pyvrp::ProblemData const &>(),

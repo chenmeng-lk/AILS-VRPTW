@@ -88,6 +88,7 @@ class LocalSearch
     size_t numUpdates_ = 0;         // modification counter
     bool searchCompleted_ = false;  // No further improving move found?
     bool enableTsla_ = true;        // whether TSLA is enabled
+    bool useTsla_ = false;  // whether TSLA is currently being used
     TopKTslaStepOne topKTslaStepOne_;
 
     // Tests the node U.
@@ -199,6 +200,16 @@ public:
      * the order in which operators are applied.
      */
     void shuffle(RandomNumberGenerator &rng);
+
+    /**
+     * Sets whether TSLA should be used in the current search iteration.
+     */
+    void setUseTsla(bool useTsla);
+
+    /**
+     * Returns whether TSLA is currently being used.
+     */
+    bool getUseTsla() const;
 
     LocalSearch(ProblemData const &data,
                 SearchSpace::Neighbours neighbours,

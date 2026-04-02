@@ -189,11 +189,20 @@ class IteratedLocalSearch:
         iters = iters_no_improvement = 0
         best = curr = self._init
 
+        # Initialize useTsla to False
+        if hasattr(self._search, 'use_tsla'):
+            self._search.use_tsla = False
+
         callbacks.on_start(self._init)
 
         cost_eval = self._pm.cost_evaluator()
         while not stop(cost_eval.cost(best)):
             iters += 1
+
+            # Enable TSLA when iters_no_improvement reaches 2000
+            if iters_no_improvement == 2000:
+                if hasattr(self._search, 'use_tsla'):
+                    self._search.use_tsla = True
 
             if iters_no_improvement == self._params.num_iters_no_improvement:
                 print_progress.restart()
@@ -212,6 +221,10 @@ class IteratedLocalSearch:
             if cost_eval.cost(cand) < cost_eval.cost(best):
                 best = cand
                 iters_no_improvement = 0
+
+                # Disable TSLA when a new best solution is found
+                if hasattr(self._search, 'use_tsla'):
+                    self._search.use_tsla = False
 
                 if self._params.exhaustive_on_best:
                     # Candidate is already a new (global) best, but let's see

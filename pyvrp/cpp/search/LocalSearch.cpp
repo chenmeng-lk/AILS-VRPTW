@@ -57,13 +57,14 @@ void LocalSearch::search(CostEvaluator const &costEvaluator)
         return;
 
     searchCompleted_ = false;
-    bool useTsla = false;
+    bool tslaOnce = false;
     //printf("enableTsla_: %d\n", enableTsla_);
     for (int step = 0; !searchCompleted_; ++step)
     {
         PYVRP_DEBUG("pyvrp.search", "Entering search loop (step={}).", step);
         searchCompleted_ = true;
-        topKTslaStepOne_.clear();
+        if (enableTsla_ && useTsla_)
+            topKTslaStepOne_.clear();
         for (auto const uClient : searchSpace_.clientOrder())
         {
             auto *U = &solution_.nodes[uClient];
@@ -104,10 +105,10 @@ void LocalSearch::search(CostEvaluator const &costEvaluator)
             if (step > 0 || !U->route())
                 applyEmptyRouteMoves(U, costEvaluator);
         }
-        if (searchCompleted_ && enableTsla_ && !useTsla)
+        if (searchCompleted_ && enableTsla_ && useTsla_ && !tslaOnce)
         {
             applyTsla(costEvaluator);
-            useTsla = true;
+            tslaOnce = true;
         }
     }
 }
@@ -185,7 +186,7 @@ void LocalSearch::applyTsla(CostEvaluator const &costEvaluator)
         bool improved = false;
         for(auto secondNode1 : *rU)
         {
-            if (std::abs(int(secondNode1->pos() - U->pos())) > 2)
+            if (std::abs(int(secondNode1->pos() - U->pos())) > 3)
             {
                 continue;
             }
@@ -219,7 +220,7 @@ void LocalSearch::applyTsla(CostEvaluator const &costEvaluator)
         {
             for(auto secondNode1 : *rV)
             {
-                if (std::abs(int(secondNode1->pos() - V->pos())) > 2)
+                if (std::abs(int(secondNode1->pos() - V->pos())) > 3)
                 {
                     continue;
                 }
@@ -373,7 +374,7 @@ bool LocalSearch::applyBinaryOps(Route::Node *U,
 
             return true;
         }
-        else if (deltaCost > 0 && exact && enableTsla_)
+        else if (deltaCost > 0 && exact && enableTsla_ && useTsla_)
         {
             topKTslaStepOne_.saveStepOne(U, V, deltaCost, op);
         }
@@ -592,4 +593,14 @@ LocalSearch::LocalSearch(ProblemData const &data,
       enableTsla_(enableTsla),
       topKTslaStepOne_(10)
 {
+}
+
+void LocalSearch::setUseTsla(bool useTsla)
+{
+    useTsla_ = useTsla;
+}
+
+bool LocalSearch::getUseTsla() const
+{
+    return useTsla_;
 }

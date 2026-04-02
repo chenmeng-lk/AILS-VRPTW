@@ -90,6 +90,20 @@ class LocalSearch:
         """
         return self._ls.statistics
 
+    @property
+    def use_tsla(self) -> bool:
+        """
+        Returns whether TSLA is currently being used.
+        """
+        return self._ls.get_use_tsla()
+
+    @use_tsla.setter
+    def use_tsla(self, value: bool):
+        """
+        Sets whether TSLA should be used in the current search iteration.
+        """
+        self._ls.set_use_tsla(value)
+
     def __call__(
         self,
         solution: Solution,
