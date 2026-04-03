@@ -35,6 +35,8 @@ python run_test.py
 # 启用 TSLA
 python3 script.py --dir instance/CVRP --seeds 42 --max_runtime 3 --workers 50 --enable_tsla
 # 禁用 TSLA
-python3 script.py --dir instance/CVRP --dir instance/VRPTW --seeds 42 --max_runtime 3 --workers 30 --enable_tsla
-
-python3 script.py --dir instance/CVRP --seeds 42 --max_runtime 3 --workers 50 --enable_tsla
+python3 script.py --dir instance/CVRP --dir instance/VRPTW --seeds 42 --max_runtime 120 --workers 80 --disable_tsla
+python3 script.py --dir instance/CVRP --dir instance/VRPTW --seeds 42 --max_runtime 120 --workers 80 --enable_tsla
+python3 script.py --dir instance/CVRP --seeds 42 --max_runtime 3 --workers 5
+python3 script.py --dir instance/CVRP --dir instance/VRPTW --seeds 42,66,188 --max_runtime 300 --workers 80 --disable_tsla
+python3 script.py --dir instance/CVRP --dir instance/VRPTW --seeds 42,66,188 --max_runtime 300 --workers 80 --enable_tsla
