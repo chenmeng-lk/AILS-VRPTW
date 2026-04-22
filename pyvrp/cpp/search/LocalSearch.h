@@ -104,7 +104,7 @@ class LocalSearch
                           Cost deltaCostFirst,
                           CostEvaluator const &costEvaluator);
 
-    void applyTsla(CostEvaluator const &costEvaluator);
+    bool applyTsla(CostEvaluator const &costEvaluator);
 
     // Tests moves involving empty routes.
     void applyEmptyRouteMoves(Route::Node *U,

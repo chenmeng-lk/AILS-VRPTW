@@ -107,19 +107,17 @@ void LocalSearch::search(CostEvaluator const &costEvaluator)
         }
         if (searchCompleted_ && enableTsla_ && useTsla_ && !tslaOnce)
         {
-            applyTsla(costEvaluator);
+            searchCompleted_ = !applyTsla(costEvaluator);
             tslaOnce = true;
         }
     }
 }
 
-void LocalSearch::applyTsla(CostEvaluator const &costEvaluator)
+bool LocalSearch::applyTsla(CostEvaluator const &costEvaluator)
 {
     const std::vector<TslaStepOne> topK = topKTslaStepOne_.getTopK();
     if (topK.empty())
-        return;
-    std::vector<bool> routeModified(solution_.routes.size(), false);
-    bool improvedOverall = false;
+        return false;
     for (auto const &step : topK)
     {
         Route::Node *U = step.node1;
@@ -136,10 +134,6 @@ void LocalSearch::applyTsla(CostEvaluator const &costEvaluator)
         auto *routes = solution_.routes.data();
         int rUIndex = std::distance(routes, U->route());
         int rVIndex = std::distance(routes, V->route());
-        if (routeModified[rUIndex] || routeModified[rVIndex])
-        {
-            continue;
-        }
         bool routeInter = rU != rV;
         //Save original route information
         std::vector<Route::Node *> originRouteU;
@@ -169,8 +163,6 @@ void LocalSearch::applyTsla(CostEvaluator const &costEvaluator)
         //Move the first step of the application
         searchSpace_.markPromising(U);
         searchSpace_.markPromising(V);
-        routeModified[rUIndex] = true;
-        routeModified[rVIndex] = true;
         opFirst->apply(U, V);
         update(rU, rV);
 
@@ -183,13 +175,8 @@ void LocalSearch::applyTsla(CostEvaluator const &costEvaluator)
             return std::vector<size_t>(neighbors.begin(), neighbors.begin() + maxNeighbours);
         };
         //Apply second step
-        bool improved = false;
         for(auto secondNode1 : *rU)
         {
-            if (std::abs(int(secondNode1->pos() - U->pos())) > 3)
-            {
-                continue;
-            }
             if (secondNode1->isDepot() || secondNode1->isStartDepot() || secondNode1->isEndDepot())
             {
                 continue;
@@ -201,29 +188,16 @@ void LocalSearch::applyTsla(CostEvaluator const &costEvaluator)
                 {
                     continue;
                 }
-                int rIndex1 = std::distance(routes, secondNode1->route());
-                int rIndex2 = std::distance(routes, secondNode2.route());
                 if (applyTslaStepTwo(secondNode1, &secondNode2, deltaCostFirst, costEvaluator))
                 {
-                    improved = true;
-                    improvedOverall = true;
-                    routeModified[rIndex1] = true;
-                    routeModified[rIndex2] = true;
-                }
-                if (improved)
-                    break;
+                    return true;
+                }         
             }
-            if (improved)
-                break;
         }
-        if (!improved && routeInter)
+        if (routeInter)
         {
             for(auto secondNode1 : *rV)
             {
-                if (std::abs(int(secondNode1->pos() - V->pos())) > 3)
-                {
-                    continue;
-                }
                 if (secondNode1->isDepot() || secondNode1->isStartDepot() || secondNode1->isEndDepot())
                 {
                     continue;
@@ -235,51 +209,36 @@ void LocalSearch::applyTsla(CostEvaluator const &costEvaluator)
                     {
                         continue;
                     }
-                    int rIndex1 = std::distance(routes, secondNode1->route());
-                    int rIndex2 = std::distance(routes, secondNode2.route());
                     if (applyTslaStepTwo(secondNode1, &secondNode2, deltaCostFirst, costEvaluator))
                     {
-                        improved = true;
-                        improvedOverall = true;
-                        routeModified[rIndex1] = true;
-                        routeModified[rIndex2] = true;
+                        return true;
                     }
-                    if (improved)
-                        break;
                 }
-                if (improved)
-                    break;
             }
         }
-        if (!improved)
+        //Restore the original route information
+        rU->clear();
+        if (routeInter)
+            rV->clear();
+        for (auto *node : originRouteU)
         {
-            //Restore the original route information
-            rU->clear();
-            if (routeInter)
-                rV->clear();
-            for (auto *node : originRouteU)
-            {
-                rU->push_back(node);
-            }
-            if (routeInter)
-            {
-                for (auto *node : originRouteV)
-                {
-                    rV->push_back(node);
-                }
-            }
-            update(rU, rV);
-            routeModified[rUIndex] = false;
-            routeModified[rVIndex] = false;
-            searchSpace_.unmarkPromising(U);
-            searchSpace_.unmarkPromising(V);
-            numUpdates_ = currentNumUpdates;
-            lastUpdate_[rUIndex] = lastUpdateU;
-            lastUpdate_[rVIndex] = lastUpdateV;
+            rU->push_back(node);
         }
+        if (routeInter)
+        {
+            for (auto *node : originRouteV)
+            {
+                rV->push_back(node);
+            }
+        }
+        update(rU, rV);
+        searchSpace_.unmarkPromising(U);
+        searchSpace_.unmarkPromising(V);
+        numUpdates_ = currentNumUpdates;
+        lastUpdate_[rUIndex] = lastUpdateU;
+        lastUpdate_[rVIndex] = lastUpdateV;
     }
-    searchCompleted_ = !improvedOverall;
-    //printf("TSLA finished, improved? %d\n", improvedOverall);
+    return false;
 }
 
 void LocalSearch::shuffle(RandomNumberGenerator &rng)
