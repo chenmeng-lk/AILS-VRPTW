@@ -1,0 +1,36 @@
+# 1. 添加 Ubuntu toolchain PPA（提供更新的 GCC 版本）
+sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+sudo apt update
+
+# 2. 安装 GCC 13
+sudo apt install g++-13 gcc-13
+
+# 3. 设置 GCC 13 为默认编译器（或临时使用）
+export CC=gcc-13
+export CXX=g++-13
+
+# 4. 清理之前的构建缓存
+rm -rf .venv
+rm -rf build
+
+export UV_PYTHON_INSTALL_MIRROR="https://registry.npmmirror.com/-/binary/python-build-standalone"
+uv python install 3.12
+uv venv --python 3.12
+# 5. 重新运行 uv sync
+uv sync
+
+执行测试套件：
+uv run pytest
+
+编译 C++ 扩展
+uv run buildtools/build_extensions.py
+
+测试实例（round_func dimacs参数把结果成本乘以10输出）
+uv run pyvrp instance/CVRP/X-n1001-k43.vrp --seed 42 --max_runtime 60
+uv run pyvrp instance/VRPTW/C1_10_10.vrp --seed 42 --max_runtime 60
+uv run pyvrp instance/VRPTW/C2_10_6.vrp --seed 42 --max_runtime 60
+
+python3 script.py --dir instance/VRPTW --seeds 42 --max_runtime 60 --workers 80
+python3 script.py --dir instance/VRPTW --seeds 42 --max_runtime 3 --workers 5
+python3 script.py --dir instance/CVRP --dir instance/VRPTW --seeds 42,66,120 --max_runtime 60 --workers 80
+python3 script.py --dir instance/CVRP --dir instance/VRPTW --seeds 42,66,120,567,2026 --max_runtime 60 --workers 80

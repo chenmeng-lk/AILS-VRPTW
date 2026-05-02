@@ -215,6 +215,35 @@ public:
         void unassign();
     };
 
+    /**
+     * Class storing data related to a REVERSED route segment starting at
+     * ``start`` and ending at ``end`` (inclusive). This is used for 2-OPT
+     * moves where we need to reverse a segment.
+     */
+    class SegmentBetweenReversed
+    {
+        Route const &route_;
+        size_t const start;
+        size_t const end;
+
+    public:
+        inline Route const *route() const;
+
+        inline SegmentProxy front() const;  // at start (in original order)
+        inline SegmentProxy back() const;   // at end (in original order)
+
+        inline size_t size() const;
+        inline size_t numClients() const;
+
+        inline bool startsAtReloadDepot() const;
+        inline bool endsAtReloadDepot() const;
+
+        inline SegmentBetweenReversed(Route const &route, size_t start, size_t end);
+        inline Distance distance(size_t profile) const;
+        inline DurationSegment duration(size_t profile) const;
+        inline LoadSegment load(size_t dimension) const;
+    };
+
 private:
     using LoadSegments = std::vector<LoadSegment>;
 
@@ -562,6 +591,8 @@ public:
      */
     [[nodiscard]] inline SegmentBetween between(size_t start, size_t end) const;
 
+    [[nodiscard]] inline SegmentBetweenReversed betweenReversed(size_t start, size_t end) const;
+
     /**
      * @return This route's vehicle type.
      */
@@ -890,6 +921,100 @@ LoadSegment Route::SegmentBetween::load(size_t dimension) const
     return loadSegment;
 }
 
+// SegmentBetweenReversed implementations
+Route const *Route::SegmentBetweenReversed::route() const { return &route_; }
+
+SegmentProxy Route::SegmentBetweenReversed::front() const
+{
+    // When reversed, the front is the original end position
+    return {route_.nodes[end]->activity(), route_.locations[end]};
+}
+
+SegmentProxy Route::SegmentBetweenReversed::back() const
+{
+    // When reversed, the back is the original start position
+    return {route_.nodes[start]->activity(), route_.locations[start]};
+}
+
+size_t Route::SegmentBetweenReversed::size() const { return end - start + 1; }
+
+size_t Route::SegmentBetweenReversed::numClients() const
+{
+    auto const fromStart = route_.numClients_[end] - route_.numClients_[start];
+    return fromStart + route_[start]->isClient();
+}
+
+bool Route::SegmentBetweenReversed::startsAtReloadDepot() const
+{
+    return route_.nodes[start]->isReloadDepot();
+}
+
+bool Route::SegmentBetweenReversed::endsAtReloadDepot() const
+{
+    return route_.nodes[end]->isReloadDepot();
+}
+
+Route::SegmentBetweenReversed::SegmentBetweenReversed(Route const &route,
+                                                      size_t start,
+                                                      size_t end)
+    : route_(route), start(start), end(end)
+{
+    assert(start <= end && end < route.size());
+}
+
+Distance Route::SegmentBetweenReversed::distance(size_t profile) const
+{
+    // For reversed segment, we need to compute distance in reverse order
+    auto const &mat = route_.data.distanceMatrix(profile);
+    Distance distance = 0;
+
+    // Walk backwards from end to start
+    for (size_t step = end; step > start; --step)
+    {
+        auto const from = route_.locations[step];
+        auto const to = route_.locations[step - 1];
+        distance += mat(from, to);
+    }
+
+    return distance;
+}
+
+DurationSegment
+Route::SegmentBetweenReversed::duration([[maybe_unused]] size_t profile) const
+{
+    auto const &mat = route_.data.durationMatrix(profile);
+
+    // Start from the end and work backwards
+    auto segment = route_.durAt[end];
+
+    if (size() != 1 && route_[end]->isReloadDepot())
+    {
+        auto const &depot = route_.data.depot(route_[end]->idx());
+        segment = DurationSegment::merge(segment, {depot.serviceDuration});
+    }
+
+    // Walk backwards from end to start
+    for (size_t step = end; step > start; --step)
+    {
+        auto const from = route_.locations[step];
+        auto const to = route_.locations[step - 1];
+        auto const &durAt = route_.durAt[step - 1];
+        segment = DurationSegment::merge(mat(from, to), segment, durAt);
+    }
+
+    return segment;
+}
+
+LoadSegment Route::SegmentBetweenReversed::load(size_t dimension) const
+{
+    auto const &loads = route_.loadAt[dimension];
+    auto loadSegment = loads[end];
+    for (size_t step = end; step != start; --step)
+        loadSegment = LoadSegment::merge(loadSegment, loads[step - 1]);
+
+    return loadSegment;
+}
+
 bool Route::isFeasible() const
 {
     assert(!dirty);
@@ -1053,6 +1178,12 @@ Route::SegmentBefore Route::before(size_t end) const
 {
     assert(!dirty);
     return {*this, end};
+}
+
+Route::SegmentBetweenReversed Route::betweenReversed(size_t start, size_t end) const
+{
+    assert(!dirty);
+    return {*this, start, end};
 }
 
 Route::SegmentBetween Route::between(size_t start, size_t end) const
