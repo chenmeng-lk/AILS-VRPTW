@@ -2,6 +2,7 @@
 #include "Exchange.h"
 #include "InsertOptional.h"
 #include "LocalSearch.h"
+#include "OperatorPerformance.h"
 #include "PerturbationManager.h"
 #include "RelocateWithDepot.h"
 #include "RemoveAdjacentDepot.h"
@@ -29,6 +30,7 @@ using pyvrp::search::Exchange;
 using pyvrp::search::InsertOptional;
 using pyvrp::search::LocalSearch;
 using pyvrp::search::NeighbourhoodParams;
+using pyvrp::search::OperatorPerformance;
 using pyvrp::search::OperatorStatistics;
 using pyvrp::search::PerturbationManager;
 using pyvrp::search::PerturbationParams;
@@ -399,6 +401,26 @@ PYBIND11_MODULE(_search, m)
              py::call_guard<py::gil_scoped_release>(),
              DOC(pyvrp, search, PerturbationManager, perturb));
 
+     py::class_<OperatorPerformance>(m, "OperatorPerformance")
+        .def(py::init<>())
+        .def_readonly("total_reward", &OperatorPerformance::totalReward)
+        .def_readonly("selection_count", &OperatorPerformance::selectionCount)
+        .def_readonly("application_count", &OperatorPerformance::applicationCount)
+        .def_readonly("avg_reward", &OperatorPerformance::avgReward)
+        .def_readwrite("alpha", &OperatorPerformance::alpha)
+        .def("update",
+             &OperatorPerformance::update,
+             py::arg("reward"),
+             py::arg("applied"))
+        .def("compute_ucb",
+             &OperatorPerformance::computeUCB,
+             py::arg("total_selections"),
+             py::arg("exploration_factor") = 1.414)
+        .def("success_rate", &OperatorPerformance::successRate)
+        .def("set_alpha", &OperatorPerformance::setAlpha, py::arg("alpha"))
+        .def("reset", &OperatorPerformance::reset)
+        .def("__eq__", &OperatorPerformance::operator==);
+
     py::class_<LocalSearch::Statistics>(
         m, "LocalSearchStatistics", DOC(pyvrp, search, LocalSearch, Statistics))
         .def_readonly("num_moves", &LocalSearch::Statistics::numMoves)
@@ -439,7 +461,21 @@ PYBIND11_MODULE(_search, m)
              py::arg("cost_evaluator"),
              py::arg("exhaustive") = false,
              py::call_guard<py::gil_scoped_release>())
-        .def("shuffle", &LocalSearch::shuffle, py::arg("rng"));
+        .def("shuffle", &LocalSearch::shuffle, py::arg("rng"))
+        .def("set_exploration_factor",
+             &LocalSearch::setExplorationFactor,
+             py::arg("factor"))
+        .def("get_exploration_factor", &LocalSearch::getExplorationFactor)
+        .def_property_readonly("unary_performance",
+                               &LocalSearch::unaryPerformance,
+                               py::return_value_policy::reference_internal)
+        .def_property_readonly("binary_performance",
+                               &LocalSearch::binaryPerformance,
+                               py::return_value_policy::reference_internal)
+        .def("reset_operator_performance", &LocalSearch::resetOperatorPerformance)
+        .def("set_operator_alpha",
+             &LocalSearch::setOperatorAlpha,
+             py::arg("alpha"));
 
     py::class_<Solution>(m, "Solution", DOC(pyvrp, search, Solution))
         .def(py::init<pyvrp::ProblemData const &>(),

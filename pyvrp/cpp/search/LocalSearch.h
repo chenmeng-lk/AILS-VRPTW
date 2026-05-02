@@ -3,6 +3,7 @@
 
 #include "CostEvaluator.h"
 #include "LocalSearchOperator.h"
+#include "OperatorPerformance.h"
 #include "PerturbationManager.h"
 #include "ProblemData.h"
 #include "RandomNumberGenerator.h"
@@ -33,6 +34,15 @@ class LocalSearch
 
     std::vector<UnaryOperator *> unaryOps_;
     std::vector<BinaryOperator *> binaryOps_;
+    std::vector<size_t> unaryOrder_;
+    std::vector<size_t> binaryOrder_;
+
+    // Adaptive operator selection using Multi-Armed Bandit (UCB)
+    std::vector<OperatorPerformance> unaryPerformance_;
+    std::vector<OperatorPerformance> binaryPerformance_;
+    size_t totalUnarySelections_ = 0;
+    size_t totalBinarySelections_ = 0;
+    double explorationFactor_ = 1.414;  // UCB exploration parameter (sqrt(2))
 
     std::vector<int> lastTest_;    // tracks last client evaluations
     std::vector<int> lastUpdate_;  // tracks when routes were last modified
@@ -142,6 +152,42 @@ public:
      * the order in which operators are applied.
      */
     void shuffle(RandomNumberGenerator &rng);
+
+    /**
+     * Sets the exploration factor for UCB algorithm.
+     */
+    void setExplorationFactor(double factor);
+
+    /**
+     * Gets the exploration factor for UCB algorithm.
+     */
+    double getExplorationFactor() const;
+
+    /**
+     * Returns the performance statistics for all unary operators.
+     */
+    std::vector<OperatorPerformance> const &unaryPerformance() const;
+
+    /**
+     * Returns the performance statistics for all binary operators.
+     */
+    std::vector<OperatorPerformance> const &binaryPerformance() const;
+
+    /**
+     * Resets all operator performance statistics.
+     */
+    void resetOperatorPerformance();
+
+    /**
+     * Sets the EWMA learning rate (alpha) for all operators.
+     *
+     * Parameters
+     * ----------
+     * alpha
+     *     Learning rate in range [0, 1]. Higher values give more weight
+     *     to recent performance (faster adaptation).
+     */
+    void setOperatorAlpha(double alpha);
 
     LocalSearch(ProblemData const &data,
                 SearchSpace::Neighbours neighbours,

@@ -117,3 +117,41 @@ class LocalSearch:
         """
         self._ls.shuffle(self._rng)
         return self._ls(solution, cost_evaluator, exhaustive)
+    
+    def print_operator_performance(self):
+        """
+        Prints the current performance statistics for all operators.
+        Useful for debugging and understanding which operators are most effective.
+        """
+        print("\n" + "=" * 80)
+        print("OPERATOR PERFORMANCE STATISTICS (UCB-based Adaptive Selection)")
+        print("=" * 80)
+
+        # Print unary operators
+        if self._ls.unary_performance:
+            print("\nUnary Operators:")
+            print("-" * 80)
+            for i, perf in enumerate(self._ls.unary_performance):
+                ucb = perf.compute_ucb(max(1, sum(p.selection_count for p in self._ls.unary_performance)),
+                                       self._ls.get_exploration_factor())
+                print(f"  Op[{i}]: UCB={ucb:8.2f} | "
+                      f"Avg Reward={perf.avg_reward:8.2f} | "
+                      f"Selections={perf.selection_count:6d} | "
+                      f"Applications={perf.application_count:6d} | "
+                      f"Success Rate={perf.success_rate():6.1%}")
+
+        # Print binary operators
+        if self._ls.binary_performance:
+            print("\nBinary Operators:")
+            print("-" * 80)
+            for i, perf in enumerate(self._ls.binary_performance):
+                total_selections = max(1, sum(p.selection_count for p in self._ls.binary_performance))
+                ucb = perf.compute_ucb(total_selections, self._ls.get_exploration_factor())
+                print(f"  Op[{i}]: UCB={ucb:8.2f} | "
+                      f"Avg Reward={perf.avg_reward:8.2f} | "
+                      f"Selections={perf.selection_count:6d} | "
+                      f"Applications={perf.application_count:6d} | "
+                      f"Success Rate={perf.success_rate():6.1%}")
+
+        print("\nExploration Factor: {:.3f}".format(self._ls.get_exploration_factor()))
+        print("=" * 80 + "\n")

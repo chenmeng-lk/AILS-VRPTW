@@ -7,12 +7,48 @@
 #include <cassert>
 #include <iterator>
 #include <numeric>
+#include <cmath>
 
 using pyvrp::Solution;
 using pyvrp::search::BinaryOperator;
 using pyvrp::search::LocalSearch;
 using pyvrp::search::SearchSpace;
 using pyvrp::search::UnaryOperator;
+
+namespace
+{
+size_t totalSelections(
+    std::vector<pyvrp::search::OperatorPerformance> const &performance)
+{
+    return std::accumulate(performance.begin(),
+                           performance.end(),
+                           size_t(0),
+                           [](size_t total,
+                              pyvrp::search::OperatorPerformance const &perf)
+                           { return total + perf.selectionCount; });
+}
+
+void rankOperatorOrder(std::vector<size_t> &order,
+                       std::vector<pyvrp::search::OperatorPerformance> const
+                           &performance,
+                       size_t totalSelections,
+                       double explorationFactor,
+                       pyvrp::RandomNumberGenerator &rng)
+{
+    rng.shuffle(order.begin(), order.end());
+
+    std::stable_sort(order.begin(),
+                     order.end(),
+                     [&](size_t lhs, size_t rhs)
+                     {
+                         double lhsUcb = performance[lhs].computeUCB(
+                             totalSelections, explorationFactor);
+                         double rhsUcb = performance[rhs].computeUCB(
+                             totalSelections, explorationFactor);
+                         return lhsUcb > rhsUcb;
+                     });
+}
+}  // namespace
 
 pyvrp::Solution LocalSearch::operator()(pyvrp::Solution const &solution,
                                         CostEvaluator const &costEvaluator,
@@ -110,15 +146,43 @@ void LocalSearch::shuffle(RandomNumberGenerator &rng)
     perturbationManager_.shuffle(rng);
     searchSpace_.shuffle(rng);
 
-    rng.shuffle(unaryOps_.begin(), unaryOps_.end());
-    rng.shuffle(binaryOps_.begin(), binaryOps_.end());
+    // Use UCB (Upper Confidence Bound) algorithm to order operators instead of random shuffling.
+    // This balances exploitation (using operators with high average reward) and exploration (trying
+    // operators that haven't been selected much).
+
+    // Sort unary operators by UCB value (highest first)
+    if (!unaryOps_.empty())
+    {
+        totalUnarySelections_ = std::max<size_t>(1, totalSelections(unaryPerformance_));
+        rankOperatorOrder(unaryOrder_,
+                          unaryPerformance_,
+                          totalUnarySelections_,
+                          explorationFactor_,
+                          rng);
+    }
+
+    // Sort binary operators by UCB value (highest first)
+    if (!binaryOps_.empty())
+    {
+        totalBinarySelections_
+            = std::max<size_t>(1, totalSelections(binaryPerformance_));
+        rankOperatorOrder(binaryOrder_,
+                          binaryPerformance_,
+                          totalBinarySelections_,
+                          explorationFactor_,
+                          rng);
+    }
 }
 
 bool LocalSearch::applyUnaryOps(Route::Node *U,
                                 CostEvaluator const &costEvaluator)
 {
-    for (auto *op : unaryOps_)
+    if (unaryOrder_.empty())
+        return false;
+    auto const selectedOpIdx = unaryOrder_.front();
+    for (auto const opIdx : unaryOrder_)
     {
+        auto *op = unaryOps_[opIdx];
         auto const [deltaCost, shouldApply] = op->evaluate(U, costEvaluator);
         if (shouldApply)
         {
@@ -146,6 +210,12 @@ bool LocalSearch::applyUnaryOps(Route::Node *U,
             [[maybe_unused]] auto const costAfter
                 = costEvaluator.penalisedCost(solution_);
 
+            // Update operator performance using a bounded success reward.
+            // This keeps the UCB signal focused on operator success rate,
+            // rather than letting a rare large improvement dominate ordering.
+            unaryPerformance_[selectedOpIdx].update(opIdx == selectedOpIdx ? 1.0 : 0.0,
+                                                    opIdx == selectedOpIdx);
+
             // When there is an improving move, the delta cost evaluation must
             // be exact. The resulting cost is then the sum of the cost before
             // the move, plus the delta cost.
@@ -154,7 +224,7 @@ bool LocalSearch::applyUnaryOps(Route::Node *U,
             return true;
         }
     }
-
+    unaryPerformance_[selectedOpIdx].update(0.0, false);
     return false;
 }
 
@@ -162,8 +232,12 @@ bool LocalSearch::applyBinaryOps(Route::Node *U,
                                  Route::Node *V,
                                  CostEvaluator const &costEvaluator)
 {
-    for (auto *op : binaryOps_)
+    if (binaryOrder_.empty())
+        return false;
+    auto const selectedOpIdx = binaryOrder_.front();
+    for (auto const opIdx : binaryOrder_)
     {
+        auto *op = binaryOps_[opIdx];
         auto const [deltaCost, shouldApply] = op->evaluate(U, V, costEvaluator);
         if (shouldApply)
         {
@@ -190,6 +264,10 @@ bool LocalSearch::applyBinaryOps(Route::Node *U,
             [[maybe_unused]] auto const costAfter
                 = costEvaluator.penalisedCost(solution_);
 
+            // Update operator performance using a bounded success reward.
+            binaryPerformance_[selectedOpIdx].update(opIdx == selectedOpIdx ? 1.0 : 0.0,
+                                                     opIdx == selectedOpIdx);
+
             // When there is an improving move, the delta cost evaluation must
             // be exact. The resulting cost is then the sum of the cost before
             // the move, plus the delta cost.
@@ -198,7 +276,7 @@ bool LocalSearch::applyBinaryOps(Route::Node *U,
             return true;
         }
     }
-
+    binaryPerformance_[selectedOpIdx].update(0.0, false);
     return false;
 }
 
@@ -316,11 +394,15 @@ void LocalSearch::update(Route *U, Route *V)
 void LocalSearch::addOperator(UnaryOperator &op)
 {
     unaryOps_.emplace_back(&op);
+    unaryPerformance_.emplace_back();  // Add corresponding performance tracker
+    unaryOrder_.push_back(unaryOrder_.size());
 }
 
 void LocalSearch::addOperator(BinaryOperator &op)
 {
     binaryOps_.emplace_back(&op);
+    binaryPerformance_.emplace_back();  // Add corresponding performance tracker
+    binaryOrder_.push_back(binaryOrder_.size());
 }
 
 std::vector<UnaryOperator *> const &LocalSearch::unaryOperators() const
@@ -372,4 +454,44 @@ LocalSearch::LocalSearch(ProblemData const &data,
       lastTest_(data.numClients()),
       lastUpdate_(data.numVehicles())
 {
+}
+
+void LocalSearch::setExplorationFactor(double factor)
+{
+    explorationFactor_ = factor;
+}
+
+double LocalSearch::getExplorationFactor() const
+{
+    return explorationFactor_;
+}
+
+std::vector<pyvrp::search::OperatorPerformance> const &
+LocalSearch::unaryPerformance() const
+{
+    return unaryPerformance_;
+}
+
+std::vector<pyvrp::search::OperatorPerformance> const &
+LocalSearch::binaryPerformance() const
+{
+    return binaryPerformance_;
+}
+
+void LocalSearch::resetOperatorPerformance()
+{
+    for (auto &perf : unaryPerformance_)
+        perf.reset();
+    for (auto &perf : binaryPerformance_)
+        perf.reset();
+    totalUnarySelections_ = 0;
+    totalBinarySelections_ = 0;
+}
+
+void LocalSearch::setOperatorAlpha(double alpha)
+{
+    for (auto &perf : unaryPerformance_)
+        perf.setAlpha(alpha);
+    for (auto &perf : binaryPerformance_)
+        perf.setAlpha(alpha);
 }

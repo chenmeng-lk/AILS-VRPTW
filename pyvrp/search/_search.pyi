@@ -11,6 +11,98 @@ from pyvrp._pyvrp import (
     RandomNumberGenerator,
 )
 
+class OperatorPerformance:
+    """
+    Tracks the performance of a local search operator for adaptive operator
+    selection using the Multi-Armed Bandit (UCB) algorithm.
+
+    Uses Exponentially Weighted Moving Average (EWMA) for avgReward, which
+    gives more weight to recent performance and allows dynamic adaptation.
+    """
+
+    total_reward: float
+    """Cumulative reward (cost improvements) from this operator (for statistics)."""
+
+    selection_count: int
+    """Number of times this operator was selected (placed first in order)."""
+
+    application_count: int
+    """Number of times this operator successfully applied an improving move."""
+
+    avg_reward: float
+    """EWMA average reward (used for UCB calculation)."""
+
+    alpha: float
+    """Learning rate for EWMA (default 0.1). Higher = more weight to recent rewards."""
+
+    def __init__(self) -> None: ...
+
+    def update(self, reward: float, applied: bool) -> None:
+        """
+        Updates the performance metrics with a new reward.
+
+        Parameters
+        ----------
+        reward
+            The reward (cost improvement) achieved.
+        applied
+            Whether the operator was successfully applied.
+        """
+        ...
+
+    def compute_ucb(
+        self, total_selections: int, exploration_factor: float = 1.414
+    ) -> float:
+        """
+        Computes the Upper Confidence Bound (UCB1) value for this operator.
+
+        Parameters
+        ----------
+        total_selections
+            Total number of selections across all operators.
+        exploration_factor
+            Exploration parameter (c in UCB formula). Default is sqrt(2).
+
+        Returns
+        -------
+        float
+            The UCB value.
+        """
+        ...
+
+    def success_rate(self) -> float:
+        """
+        Returns the success rate of this operator.
+
+        Returns
+        -------
+        float
+            The ratio of applications to selections (in range [0, 1]).
+        """
+        ...
+
+    def set_alpha(self, alpha: float) -> None:
+        """
+        Sets the learning rate (alpha) for EWMA.
+
+        Parameters
+        ----------
+        alpha
+            Learning rate in range [0, 1]. Higher values give more weight
+            to recent rewards (faster adaptation).
+            - 0.05: Very stable, slow adaptation
+            - 0.1:  Default, balanced
+            - 0.2:  Fast adaptation
+            - 0.5:  Very reactive
+        """
+        ...
+
+    def reset(self) -> None:
+        """Resets all performance metrics to initial state."""
+        ...
+
+    def __eq__(self, other: OperatorPerformance) -> bool: ...
+
 class OperatorStatistics:
     num_evaluations: int
     num_applications: int
@@ -135,6 +227,76 @@ class LocalSearch:
         exhaustive: bool = False,
     ) -> pyvrp.Solution: ...
     def shuffle(self, rng: RandomNumberGenerator) -> None: ...
+    def set_exploration_factor(self, factor: float) -> None:
+        """
+        Sets the exploration factor for UCB algorithm.
+
+        Parameters
+        ----------
+        factor
+            Exploration parameter (c in UCB formula). Higher values encourage
+            more exploration. Default is sqrt(2) ≈ 1.414.
+        """
+        ...
+
+    def get_exploration_factor(self) -> float:
+        """
+        Gets the exploration factor for UCB algorithm.
+
+        Returns
+        -------
+        float
+            The current exploration factor.
+        """
+        ...
+
+    @property
+    def unary_performance(self) -> list[OperatorPerformance]:
+        """
+        Returns the performance statistics for all unary operators.
+
+        Returns
+        -------
+        list[OperatorPerformance]
+            Performance metrics for each unary operator, in the same order
+            as they were added.
+        """
+        ...
+
+    @property
+    def binary_performance(self) -> list[OperatorPerformance]:
+        """
+        Returns the performance statistics for all binary operators.
+
+        Returns
+        -------
+        list[OperatorPerformance]
+            Performance metrics for each binary operator, in the same order
+            as they were added.
+        """
+        ...
+
+    def reset_operator_performance(self) -> None:
+        """
+        Resets all operator performance statistics to initial state.
+        """
+        ...
+
+    def set_operator_alpha(self, alpha: float) -> None:
+        """
+        Sets the EWMA learning rate (alpha) for all operators.
+
+        Parameters
+        ----------
+        alpha
+            Learning rate in range [0, 1]. Higher values give more weight
+            to recent performance (faster adaptation).
+            - 0.05: Very stable, slow adaptation
+            - 0.1:  Default, balanced
+            - 0.2:  Fast adaptation
+            - 0.5:  Very reactive
+        """
+        ...
 
 class Solution:
     nodes: list[Node]
