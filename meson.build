@@ -91,6 +91,7 @@ libsearch = static_library(
         SRC_DIR / 'search' / 'Solution.cpp',
         SRC_DIR / 'search' / 'SwapTails.cpp',
         SRC_DIR / 'search' / 'TwoOpt.cpp',
+        SRC_DIR / 'search' / 'TwoOptStar.cpp',
     ],
     dependencies: spdlog,
     include_directories: INCLUDES,

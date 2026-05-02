@@ -23,6 +23,7 @@ from ._search import ReplaceGroup as ReplaceGroup
 from ._search import ReplaceOptional as ReplaceOptional
 from ._search import SwapTails as SwapTails
 from ._search import TwoOpt as TwoOpt
+from ._search import TwoOptStar as TwoOptStar
 from ._search import UnaryOperator as UnaryOperator
 from .neighbourhood import compute_neighbours as compute_neighbours
 
@@ -40,4 +41,5 @@ OPERATORS: list[Type[UnaryOperator | BinaryOperator]] = [
     ReplaceOptional,
     ReplaceGroup,
     TwoOpt,
+    TwoOptStar,
 ]

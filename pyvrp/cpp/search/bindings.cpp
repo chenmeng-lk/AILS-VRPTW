@@ -13,6 +13,7 @@
 #include "Solution.h"
 #include "SwapTails.h"
 #include "TwoOpt.h"
+#include "TwoOptStar.h"
 #include "neighbourhood.h"
 #include "search_docs.h"
 
@@ -45,6 +46,7 @@ using pyvrp::search::supports;
 using pyvrp::search::SwapTails;
 using pyvrp::search::UnaryOperator;
 using pyvrp::search::TwoOpt;
+using pyvrp::search::TwoOptStar;
 
 PYBIND11_MODULE(_search, m)
 {
@@ -327,6 +329,23 @@ PYBIND11_MODULE(_search, m)
         .def("apply", &TwoOpt::apply, py::arg("U"), py::arg("V"))
         .def("init", &TwoOpt::init, py::arg("solution"))
         .def_static("supports", &supports<TwoOpt>, py::arg("data"));
+
+     py::class_<TwoOptStar, BinaryOperator>(
+        m, "TwoOptStar", DOC(pyvrp, search, TwoOptStar))
+        .def(py::init<pyvrp::ProblemData const &>(),
+             py::arg("data"),
+             py::keep_alive<1, 2>())  // keep data alive
+        .def_property_readonly("statistics",
+                               &TwoOptStar::statistics,
+                               py::return_value_policy::reference_internal)
+        .def("evaluate",
+             &TwoOptStar::evaluate,
+             py::arg("U"),
+             py::arg("V"),
+             py::arg("cost_evaluator"))
+        .def("apply", &TwoOptStar::apply, py::arg("U"), py::arg("V"))
+        .def("init", &TwoOptStar::init, py::arg("solution"))
+        .def_static("supports", &supports<TwoOptStar>, py::arg("data"));
 
     py::class_<RelocateWithDepot, BinaryOperator>(
         m, "RelocateWithDepot", DOC(pyvrp, search, RelocateWithDepot))
