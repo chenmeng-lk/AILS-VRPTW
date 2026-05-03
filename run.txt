@@ -30,7 +30,7 @@ uv run pyvrp instance/CVRP/X-n1001-k43.vrp --seed 42 --max_runtime 60
 uv run pyvrp instance/VRPTW/C1_10_10.vrp --seed 42 --max_runtime 60
 uv run pyvrp instance/VRPTW/C2_10_6.vrp --seed 42 --max_runtime 60
 
-python3 script.py --dir instance/VRPTW --seeds 42 --max_runtime 60 --workers 80
+python3 script.py --dir instance/CVRP --seeds 42 --max_runtime 60 --workers 80
 python3 script.py --dir instance/VRPTW --seeds 42 --max_runtime 3 --workers 5
 python3 script.py --dir instance/CVRP --dir instance/VRPTW --seeds 42,66,120 --max_runtime 60 --workers 80
 python3 script.py --dir instance/CVRP --dir instance/VRPTW --seeds 42,66,120,567,2026 --max_runtime 60 --workers 80
