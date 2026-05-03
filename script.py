@@ -8,7 +8,7 @@ import argparse
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
-import datetime  # 新增：用于生成时间戳
+import datetime
 
 try:
     from tqdm import tqdm
@@ -43,8 +43,6 @@ def parse_output(output):
     lines = output.strip().split('\n')
     results = {}
     for i, line in enumerate(lines):
-        # 匹配格式：实例名 OK/NO 目标值 迭代次数 时间
-        # 但我们不再保存实例名，只保存后面的字段
         if re.match(r'^\S+\s+[YN]\s+\d+\.?\d*\s+\d+\s+\d+\.?\d*$', line.strip()):
             parts = line.strip().split()
             if len(parts) >= 5:
@@ -89,8 +87,7 @@ def run_single_test(instance, seed, max_runtime, best_cost=None, enable_tsla=Fal
         if parsed:
             parsed['exit_code'] = result.returncode
             parsed['raw_output'] = result.stdout
-            # 关键修正：强制使用正确的实例名
-            parsed['instance'] = os.path.basename(instance).replace('.vrp', '')
+            # 不再依赖输出中的实例名，由调用者传入
             if best_cost is not None and best_cost > 0 and parsed['ok'] == 'Y':
                 try:
                     gap = ((parsed['objective'] - best_cost) / best_cost) * 100
@@ -104,9 +101,7 @@ def run_single_test(instance, seed, max_runtime, best_cost=None, enable_tsla=Fal
                 parsed['best_cost'] = best_cost
             return parsed
         else:
-            # 解析失败，返回默认结果，同样使用正确的实例名
             return {
-                'instance': os.path.basename(instance).replace('.vrp', ''),
                 'ok': 'N',
                 'objective': 0,
                 'iterations': 0,
@@ -130,7 +125,6 @@ def calculate_averages(results_list):
     gaps = [r['gap_percent'] for r in results_list if r and r['ok'] == 'Y' and r['gap_percent'] is not None]
     ok_count = sum(1 for r in results_list if r and r['ok'] == 'Y')
     averages = {
-        'instance': results_list[0]['instance'],
         'runs': len(results_list),
         'successful_runs': ok_count,
         'success_rate': ok_count / len(results_list) if results_list else 0,
@@ -156,8 +150,35 @@ def calculate_averages(results_list):
         averages['has_gap'] = False
     return averages
 
+def get_display_name(full_path):
+    """
+    从完整路径中提取相对于 'instance' 目录的路径部分（不包含 'instance' 自身），
+    并拼接文件名（不含 .vrp）。
+    例如：/path/to/instance/CVRP/setA/X.vrp -> CVRP/setA/X
+    如果找不到 'instance' 目录，则直接返回文件名（不含扩展名）。
+    """
+    normalized = os.path.normpath(full_path)
+    parts = normalized.split(os.sep)
+    try:
+        idx = parts.index('instance')
+        # 取 'instance' 之后的所有部分，包括文件名（但要去掉 .vrp 扩展名）
+        rel_parts = parts[idx+1:]  # 例如 ['CVRP', 'setA', 'X.vrp']
+        if not rel_parts:
+            return os.path.splitext(os.path.basename(full_path))[0]
+        # 分离文件名和扩展名
+        *dirs, file = rel_parts
+        base_name = os.path.splitext(file)[0]
+        if dirs:
+            display = os.path.join(*dirs, base_name)
+        else:
+            display = base_name
+        return display.replace(os.sep, '/')   # 统一使用 '/' 分隔
+    except ValueError:
+        # 没有找到 'instance' 目录，回退到纯文件名
+        return os.path.splitext(os.path.basename(full_path))[0]
+
 def find_vrp_files(directories):
-    """查找所有vrp文件及对应的解文件"""
+    """查找所有vrp文件及对应的解文件，同时计算 display_name"""
     vrp_info_list = []
     def natural_sort_key(s):
         import re
@@ -174,6 +195,8 @@ def find_vrp_files(directories):
                 for file in vrp_files:
                     instance_path = os.path.join(root, file)
                     instance_name = file.replace('.vrp', '')
+                    display_name = get_display_name(instance_path)
+                    
                     sol_file_candidates = [
                         os.path.join(root, f"{instance_name}.sol"),
                         os.path.join(root, f"{instance_name}.sol.txt"),
@@ -188,10 +211,11 @@ def find_vrp_files(directories):
                                 print(f"  ✓ 找到解文件: {os.path.basename(candidate)}, 最优成本: {best_cost}")
                                 break
                     if best_cost is None:
-                        print(f"  ! 未找到解文件: {instance_name}")
+                        print(f"  ! 未找到解文件: {display_name}")
                     current_dir_instances.append({
                         'instance_path': instance_path,
                         'instance_name': instance_name,
+                        'display_name': display_name,
                         'best_cost': best_cost,
                         'relative_path': os.path.relpath(instance_path, directory)
                     })
@@ -203,7 +227,7 @@ def find_vrp_files(directories):
     return vrp_info_list
 
 def run_multi_seed_tests_parallel(vrp_info_list, seeds, max_runtime, detailed_csv, summary_csv, workers=80, enable_tsla=False, disable_tsla=False):
-    """并行运行多种子测试，支持 TSLA 开关"""
+    """并行运行多种子测试，支持 TSLA 开关，使用 display_name 作为实例标识"""
     print(f"使用种子: {seeds}")
     print(f"最大运行时间: {max_runtime}秒")
     if enable_tsla:
@@ -220,14 +244,14 @@ def run_multi_seed_tests_parallel(vrp_info_list, seeds, max_runtime, detailed_cs
     instances_with_sol = sum(1 for info in vrp_info_list if info['best_cost'] is not None)
     print(f"包含最优解文件的实例: {instances_with_sol}/{len(vrp_info_list)}")
 
-    # 构建所有任务列表
+    # 构建所有任务列表，使用 display_name 作为标识
     tasks = []
     for vrp_info in vrp_info_list:
         instance_path = vrp_info['instance_path']
-        instance_name = vrp_info['instance_name']
+        display_name = vrp_info['display_name']
         best_cost = vrp_info['best_cost']
         for seed in seeds:
-            tasks.append((instance_name, instance_path, seed, max_runtime, best_cost, enable_tsla, disable_tsla))
+            tasks.append((display_name, instance_path, seed, max_runtime, best_cost, enable_tsla, disable_tsla))
 
     total_tasks = len(tasks)
     print(f"总任务数: {total_tasks} (实例数 × 种子数)")
@@ -236,9 +260,9 @@ def run_multi_seed_tests_parallel(vrp_info_list, seeds, max_runtime, detailed_cs
     progress_lock = threading.Lock()
     completed_count = 0
 
-    def run_task(instance_name, instance_path, seed, max_runtime, best_cost, enable_tsla, disable_tsla):
+    def run_task(display_name, instance_path, seed, max_runtime, best_cost, enable_tsla, disable_tsla):
         result = run_single_test(instance_path, seed, max_runtime, best_cost, enable_tsla, disable_tsla)
-        return (instance_name, seed, result)
+        return (display_name, seed, result)
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
         future_to_task = {
@@ -271,7 +295,7 @@ def run_multi_seed_tests_parallel(vrp_info_list, seeds, max_runtime, detailed_cs
         if pbar:
             pbar.close()
 
-    # 按实例分组结果
+    # 按 display_name 分组结果
     instance_results = defaultdict(list)
     for name, seed, res in results:
         if res is not None:
@@ -280,10 +304,10 @@ def run_multi_seed_tests_parallel(vrp_info_list, seeds, max_runtime, detailed_cs
 
     # 准备详细结果行
     detail_rows = []
-    for instance_name, res_list in instance_results.items():
+    for display_name, res_list in instance_results.items():
         for res in res_list:
             row = [
-                instance_name,
+                display_name,
                 res['seed'],
                 res['objective'],
                 res.get('best_cost', 'N/A'),
@@ -301,16 +325,16 @@ def run_multi_seed_tests_parallel(vrp_info_list, seeds, max_runtime, detailed_cs
         writer.writerow(['Instance', 'Seed', 'Obj.', 'Best Obj.', 'GAP(%)', 'Iters', 'Time (s)', 'OK', 'Exit Code'])
         writer.writerows(detail_rows)
 
-    # 计算汇总（按实例名字典序排序）
+    # 计算汇总（按 display_name 字典序排序）
     summary_rows = []
-    sorted_instances = sorted(instance_results.keys())  # 字典序排序
-    for instance_name in sorted_instances:
-        res_list = instance_results[instance_name]
+    sorted_instances = sorted(instance_results.keys())
+    for display_name in sorted_instances:
+        res_list = instance_results[display_name]
         best_cost = res_list[0].get('best_cost') if res_list else None
         avg = calculate_averages(res_list)
         avg['best_cost'] = best_cost
         row = [
-            instance_name,
+            display_name,
             f"{best_cost:.0f}" if best_cost is not None else 'N/A',
             avg['runs'],
             avg['successful_runs'],
@@ -337,10 +361,10 @@ def run_multi_seed_tests_parallel(vrp_info_list, seeds, max_runtime, detailed_cs
     if summary_rows:
         print("\n汇总表格:")
         print("-" * 100)
-        print(f"{'Instance':<20} {'Best':<10} {'Runs':<6} {'Success':<8} {'Obj Avg':<10} {'GAP Avg(%)':<12} {'Iters Avg':<10} {'Time Avg':<10}")
+        print(f"{'Instance':<30} {'Best':<10} {'Runs':<6} {'Success':<8} {'Obj Avg':<10} {'GAP Avg(%)':<12} {'Iters Avg':<10} {'Time Avg':<10}")
         print("-" * 100)
         for row in summary_rows:
-            print(f"{row[0]:<20} {row[1]:<10} "
+            print(f"{row[0]:<30} {row[1]:<10} "
                   f"{row[2]:<6} "
                   f"{row[3]}/{row[2]:<7} "
                   f"{row[5]:<10} "
@@ -351,7 +375,7 @@ def run_multi_seed_tests_parallel(vrp_info_list, seeds, max_runtime, detailed_cs
         print("无有效结果")
 
 def main():
-    parser = argparse.ArgumentParser(description='批量运行VRP测试（并行版本，支持TSLA开关）')
+    parser = argparse.ArgumentParser(description='批量运行VRP测试（并行版本，支持TSLA开关，实例名包含相对路径）')
     parser.add_argument('--max_runtime', type=int, default=60, help='最大运行时间（秒）')
     parser.add_argument('--dir', action='append', help='实例目录（可多次使用）', default=[])
     parser.add_argument('--seeds', type=str, default='42', help='种子列表，用逗号分隔')
@@ -366,14 +390,12 @@ def main():
     if args.enable_tsla and args.disable_tsla:
         parser.error("--enable_tsla 和 --disable_tsla 不能同时使用")
 
-    # 处理实例目录
     if not args.dir:
         args.dir = ['instance/CVRP', 'instance/VRPTW']
         print("未指定 --dir，使用默认目录: instance/CVRP, instance/VRPTW")
 
     seeds = [int(seed.strip()) for seed in args.seeds.split(',')]
 
-    # 查找所有实例
     vrp_info_list = find_vrp_files(args.dir)
 
     if not vrp_info_list:
@@ -383,7 +405,7 @@ def main():
     print("\n找到的实例文件:")
     for i, info in enumerate(vrp_info_list, 1):
         best_str = f"最优成本: {info['best_cost']}" if info['best_cost'] is not None else "无解文件"
-        print(f"{i:3d}. {info['instance_name']:<30} ({best_str})")
+        print(f"{i:3d}. {info['display_name']:<40} ({best_str})")
 
     total_tasks = len(vrp_info_list) * len(seeds)
     print(f"\n将测试 {len(vrp_info_list)} 个实例，使用 {len(seeds)} 个种子，共 {total_tasks} 个任务")
@@ -392,20 +414,16 @@ def main():
         print("测试取消")
         sys.exit(0)
 
-    # 生成时间戳
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
-    # 处理详细CSV文件名
     detailed_basename = os.path.basename(args.detailed_csv)
     detailed_name, detailed_ext = os.path.splitext(detailed_basename)
     detailed_csv_with_ts = f"{detailed_name}_{timestamp}{detailed_ext}"
 
-    # 处理汇总CSV文件名
     summary_basename = os.path.basename(args.summary_csv)
     summary_name, summary_ext = os.path.splitext(summary_basename)
     summary_csv_with_ts = f"{summary_name}_{timestamp}{summary_ext}"
 
-    # 创建输出目录
     log_dir = "vrp_logs"
     os.makedirs(log_dir, exist_ok=True)
 
