@@ -14,11 +14,14 @@ std::pair<pyvrp::Cost, bool> TwoOptStar::evaluate(
     if (!uRoute || uRoute == vRoute)
         return std::make_pair(0, false);  // unassigned, or same route
 
-    // Split operator cannot handle routes with multiple trips (reload depots)
+    if (uRoute > vRoute && !uRoute->empty() && !vRoute->empty())
+        return std::make_pair(0, false);  // move will be tackled later
+
+    // TwoOptStar operator cannot handle routes with multiple trips (reload depots)
     if (uRoute->numTrips() > 1 || vRoute->numTrips() > 1)
         return std::make_pair(0, false);
 
-    // Split operator requires both U and V to have nodes before and after them
+    // TwoOptStar operator requires both U and V to have nodes before and after them
     // U must have: head1 (nodes before U) and tail1 (nodes after U)
     // V must have: head2 (nodes before V) and tail2 (nodes after V)
     bool hasHead1 = U->pos() > 1;           // U has nodes before it
@@ -27,21 +30,24 @@ std::pair<pyvrp::Cost, bool> TwoOptStar::evaluate(
     bool hasTail2 = !n(V)->isEndDepot();    // V has nodes after it
 
     if (!hasHead1 || !hasTail1 || !hasHead2 || !hasTail2)
-        return std::make_pair(0, false);  // not enough nodes for Split
+        return std::make_pair(0, false);  // not enough nodes for TwoOptStar
 
     Cost deltaCost = 0;
 
     // Build proposals for the TwoOptStar operation:
-    // New route 1: U_before + reverse(V_before)
-    // New route 2: reverse(U+1_after) + V+1_after
+    // New route 1: head1 + U + V + reverse(head2) + end_depot
+    // New route 2: start_depot + reverse(tail1) + tail2 + end_depot
     auto const uProposal
         = Route::Proposal(uRoute->before(U->pos()),
-                          vRoute->betweenReversed(1, V->pos()),
+                          vRoute->at(V->pos()),
+                          Route::SegmentBetweenReversed(
+                              *vRoute, 1, V->pos() - 1),
                           uRoute->at(uRoute->size() - 1));
 
     auto const vProposal
         = Route::Proposal(vRoute->at(0),
-                          uRoute->betweenReversed(U->pos() + 1, uRoute->size() - 2),
+                          Route::SegmentBetweenReversed(
+                              *uRoute, U->pos() + 1, uRoute->size() - 2),
                           vRoute->after(V->pos() + 1));
 
     costEvaluator.deltaCost(deltaCost, uProposal, vProposal);

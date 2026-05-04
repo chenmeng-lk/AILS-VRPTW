@@ -946,12 +946,14 @@ size_t Route::SegmentBetweenReversed::numClients() const
 
 bool Route::SegmentBetweenReversed::startsAtReloadDepot() const
 {
-    return route_.nodes[start]->isReloadDepot();
+    // When reversed, the start is the original end position
+    return route_.nodes[end]->isReloadDepot();
 }
 
 bool Route::SegmentBetweenReversed::endsAtReloadDepot() const
 {
-    return route_.nodes[end]->isReloadDepot();
+    // When reversed, the end is the original start position
+    return route_.nodes[start]->isReloadDepot();
 }
 
 Route::SegmentBetweenReversed::SegmentBetweenReversed(Route const &route,
