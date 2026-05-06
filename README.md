@@ -1,113 +1,176 @@
-![PyVRP logo](docs/source/assets/images/logo.svg)
+# Adaptive-ILS-VRPTW
 
-[![PyPI version](https://img.shields.io/pypi/v/PyVRP?style=flat-square&label=PyPI)](https://pypi.org/project/pyvrp/)
-[![CI](https://img.shields.io/github/actions/workflow/status/PyVRP/PyVRP/.github%2Fworkflows%2FCI.yml?branch=main&style=flat-square&logo=github&label=CI)](https://github.com/PyVRP/PyVRP/actions/workflows/CI.yml)
-[![DOC](https://img.shields.io/github/actions/workflow/status/PyVRP/PyVRP/.github%2Fworkflows%2FDOC.yml?branch=main&style=flat-square&logo=github&label=DOC)](https://pyvrp.org/)
-[![codecov](https://img.shields.io/codecov/c/github/PyVRP/PyVRP?style=flat-square&logo=codecov&label=Codecov)](https://codecov.io/gh/PyVRP/PyVRP)
-[![DOI:10.1287/ijoc.2023.0055](https://img.shields.io/badge/DOI-ijoc.2023.0055-green?style=flat-square&color=blue)](https://doi.org/10.1287/ijoc.2023.0055)
+**带时间窗车辆路径问题的自适应迭代局部搜索启发式算法**  
+*Adaptive Iterated Local Search Heuristic for the Vehicle Routing Problem with Time Windows*
 
-PyVRP is an open-source, state-of-the-art vehicle routing problem (VRP) solver developed by [RoutingLab](https://routinglab.tech).
-It currently supports VRPs with:
-- Pickups and deliveries between depots and clients (capacitated VRP, VRP with simultaneous pickup and delivery, VRP with backhaul);
-- Vehicles of different capacities, costs, shift durations, routing profiles, and maximum distance and duration constraints (heterogeneous fleet VRP, site-dependent VRP);
-- Time windows, client service durations, and release times (VRP with time windows and release times);
-- Multiple depots (multi-depot VRP);
-- Reloading along routes at different reload depots (multi-trip VRP);
-- Optional clients with prizes for visiting (prize collecting, team orienteering problem);
-- Client groups imposing additional restrictions on multiple clients jointly (generalised VRP, VRP with multiple time windows);
-- **[Enterprise]** Automatic break planning for EU and US hours-of-service regulations;
-- **[Enterprise]** Vehicle-client and client-client compatibility constraints and sequencing relations;
-- **[Enterprise]** Fairness constraints like load and shift duration balancing.
+[![Python 3.8](https://img.shields.io/badge/Python-3.8-blue.svg)](https://www.python.org/)
+[![C++17](https://img.shields.io/badge/C++-17-blue.svg)](https://en.cppreference.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-PyVRP is available on the Python package index as `pyvrp`.
-It may be installed in the usual way as
+## 概览
+
+本项目基于开源求解器 [PyVRP](https://github.com/PyVRP/PyVRP) 的原生迭代局部搜索（ILS）框架，针对带时间窗车辆路径问题（VRPTW）设计并实现了**三项独立的探索性改进机制**。通过系统性实验评估，验证了各机制在不同约束类型（CVRP / VRPTW）及问题规模下的有效性、适用边界与潜在局限。
+
+本工作为ILS算法在车辆路径问题中的**前瞻性搜索策略**、**多样化算子集成**以及**自适应邻域选择**提供了可复现的实证结论与实现参考。
+
+---
+
+## 分支说明
+
+本仓库的 **`main` 分支与上游 PyVRP v0.14.0 保持完全一致**，未做任何修改，便于对比和复现原始结果。
+
+三项改进机制分别位于独立的主题分支中，每个分支仅包含对应机制的代码变更：
+
+| 分支名称 | 对应改进机制                                      |
+| -------- | ------------------------------------------------- |
+| `TSLA`   | 双层前瞻性搜索（Two-Stage Lookahead）             |
+| `2opt`   | 集成 2‑opt 与 2‑opt\* 算子                        |
+| `UCB`    | 基于UCB的自适应邻域选择（Upper Confidence Bound） |
+| `Test`   | 批量测试结果及分析                                |
+
+> 遵循**单一变量替换原则**，各分支彼此独立，未进行多机制联合集成。如需使用某项改进，请切换到对应分支。
+
+---
+
+## 主要特性
+
+- **双层前瞻性搜索（TSLA）**  
+  维护成本增量最小的“恶化移动”候选列表，在局部搜索停滞时探索“先恶化后改进”的两阶段移动组合，尝试突破贪心策略的局部最优壁垒。
+
+- **多样化局部搜索算子集成**  
+  在PyVRP原生算子（nmEX、SwapTails）基础上引入 **2-opt** 与 **2-opt\*** 两类边交换算子，支持路径内序列反转与路径间后缀交换，显著增强邻域结构的重组能力。
+
+- **基于UCB的自适应邻域选择**  
+  将算子调用顺序建模为多臂老虎机问题，以算子作为首选时的历史成功率为奖励信号，采用指数加权移动平均（EWMA）与置信上界（UCB）公式动态调整算子优先级，实现在线探索与利用的平衡。
+
+上述机制均遵循**单一变量替换原则**，以模块化形式嵌入基准框架，保证实验结论的可归因性。
+
+---
+
+## 算法框架
+
+下图展示了基准ILS算法与三项改进机制的集成关系（完整流程详见论文第3章）：
+
 ```
-pip install pyvrp
-```
-
-The documentation is available [here][1].
-
-> [!TIP]
-> Looking for professional support or enterprise features? [RoutingLab](https://routinglab.tech) provides consulting, custom development, and FastVRP - a production-ready route optimisation API built on PyVRP.
-
-### Tutorials
-
-We provide many tutorials that show how to use PyVRP to solve vehicle routing problems.
-The [quickstart][4] introduces PyVRP's modelling interface and is a great way to get started.
-
-The following tutorials cover specific features in more detail:
-- [Load and vehicle capacities][5]: pickups, deliveries, and multiple load dimensions.
-- [Time and duration constraints][6]: time windows, service durations, release times, shifts and overtime.
-- [Profiles][7]: different distances and durations for different vehicle types, and modelling access restrictions.
-- [Optional clients][8]: using rewards to visit optional clients.
-- [Mutually exclusive groups][9]: modelling alternative services.
-- [Reloading][10]: vehicle reloading at depots during routes.
-
-For those interested in PyVRP's underlying algorithm, see [this page][11] for a high-level description of the iterated local search algorithm, and [this notebook][12] for an implementation of the `solve` method using PyVRP's components.
-
-### Getting help
-
-Feel free to open an issue or a new discussion thread here on GitHub.
-When writing your issue or discussion, please follow the instructions [here][3].
-For professional support, contact us at [info@routinglab.tech](mailto:info@routinglab.tech).
-
-### Contributing
-
-While we are very grateful for any contributions you are willing to make, reviewing and maintaining third-party code takes a significant amount of our time.
-Before you start working on your contribution, please have a look [here][2] to get started.
-Make sure to discuss the change first in a GitHub issue.
-Feel free to open a new one if no appropriate issue already exists!
-
-### How to cite PyVRP
-
-If you use PyVRP in your research, please consider citing the following paper:
-
-> Wouda, N.A., L. Lan, and W. Kool (2024).
-> PyVRP: a high-performance VRP solver package.
-> _INFORMS Journal on Computing_, 36(4): 943-955.
-> https://doi.org/10.1287/ijoc.2023.0055
-
-Or, using the following BibTeX entry:
-
-```bibtex
-@article{Wouda_Lan_Kool_PyVRP_2024,
-  doi = {10.1287/ijoc.2023.0055},
-  url = {https://doi.org/10.1287/ijoc.2023.0055},
-  year = {2024},
-  volume = {36},
-  number = {4},
-  pages = {943--955},
-  publisher = {INFORMS},
-  author = {Niels A. Wouda and Leon Lan and Wouter Kool},
-  title = {{PyVRP}: a high-performance {VRP} solver package},
-  journal = {INFORMS Journal on Computing},
-}
+初始解生成 → 局部搜索 → 扰动 → 接受准则 → 终止判断
+                ↑
+        ┌───────┴───────┐
+        │               │
+   TSLA两阶段探索   自适应算子排序(UCB)
+        │               │
+   2-opt / 2-opt* 算子扩展
 ```
 
-A preprint of this paper is available on [arXiv][13].
+- **局部搜索**：基于序列拼接的增量式移动评估，快速计算时间窗约束下的成本变化。
+- **TSLA触发**：连续2000次迭代无改进后启用，尝试TopK恶化移动的两阶段组合。
+- **UCB排序**：每次局部搜索前按UCB分数降序重排算子调用顺序，优先尝试历史表现优异的算子。
 
-[1]: https://pyvrp.org/
+---
 
-[2]: https://pyvrp.org/dev/contributing.html
+## 项目结构
 
-[3]: https://pyvrp.org/setup/getting_help.html
+```
+AILS-VRPTW/
+├── pyvrp/                       # PyVRP 核心包（基于 v0.14.0）
+│   ├── cpp/                     # C++ 扩展代码
+│   │   └── search/              # ⭐ 主要修改区域（TSLA / 2opt / UCB）
+│   ├── search/                  # Python 搜索接口
+│   └── ...
+├── instances/                   # 测试实例集（CVRP / VRPTW）
+├── tests/                       # 测试套件
+├── benchmarks/                  # 性能基准测试
+├── docs/                        # 文档源码
+├── notebooks/                   # Jupyter 教程
+├── buildtools/                  # 编译工具
+├── pyproject.toml               # 项目配置
+└── README.md
+```
 
-[4]: https://pyvrp.org/notebooks/quick_start.html
+> **说明**：C++核心代码位于 `pyvrp/` 目录下，通过 `pybind11` 暴露Python接口。实验脚本利用Python调用编译后的扩展。
 
-[5]: https://pyvrp.org/notebooks/load.html
+---
 
-[6]: https://pyvrp.org/notebooks/duration_constraints.html
+## 实验结果摘要
 
-[7]: https://pyvrp.org/notebooks/profiles.html
+在170个标准实例（CVRP 100~30000客户，VRPTW 1000客户）上进行了严格对比，主要结果如下：
 
-[8]: https://pyvrp.org/notebooks/optional_clients.html
+| 算法变体             | 平均 gap (%) | 胜率 (vs baseline) | 适用场景                     |
+| -------------------- | ------------ | ------------------ | ---------------------------- |
+| baseline (PyVRP ILS) | 0.99 ± 0.12  | –                  | –                            |
+| + TSLA               | 0.98 ± 0.12  | 50.6%              | 中等规模CVRP（有限潜力）     |
+| + 2-opt              | 0.96 ± 0.11  | 55.3%              | CVRP中大规模                 |
+| + 2-opt*             | **0.91 ± 0.11** | **60.6%**          | **CVRP全规模（推荐）**       |
+| + 2-opt + 2-opt*     | 0.93 ± 0.10  | 56.5%              | 超大规模CVRP（协同增益）     |
+| + UCB (自适应排序)   | 0.98 ± 0.12  | **56.5%**          | **VRPTW（唯一稳定改进）**    |
 
-[9]: https://pyvrp.org/notebooks/mutually_exclusive_groups.html
+**关键发现**：
+- **2-opt\*** 在纯容量约束（CVRP）上大幅提升解质量，超大规模（30000客户）平均gap降低1.25个百分点。
+- 反转类算子（2-opt / 2-opt\*）在**带时间窗（VRPTW）** 中效果退化，联合使用时甚至导致性能下降。
+- UCB自适应机制在VRPTW上胜多负少（35胜24负），通过动态规避对时间窗不利的算子，在复杂约束下展现出稳健性。
+- TSLA整体未取得统计显著改进，其有效性高度依赖于解的收敛状态与运行时间（负结果同样具有参考价值）。
 
-[10]: https://pyvrp.org/notebooks/reloading.html
+详细实验分析、累积分布曲线及 Wilcoxon 检验结果参见论文第4章。
 
-[11]: https://pyvrp.org/dev/algorithm.html
+---
 
-[12]: https://pyvrp.org/notebooks/pyvrp_implementation.html
+## 快速开始
 
-[13]: https://arxiv.org/abs/2403.13795
+### 环境要求
+
+- Linux / macOS（推荐Ubuntu 20.04+）
+- g++ 13 或更高版本（C++17支持）
+- CMake ≥ 3.15
+- Python 3.8 – 3.10
+
+### 安装
+
+```bash
+# 克隆仓库
+git clone https://github.com/chenmeng-lk/AILS-VRPTW.git
+cd AILS-VRPTW
+
+# 如需使用某项改进机制，请切换到对应分支（例如 TSLA）
+git checkout TSLA
+
+# 同步依赖并编译
+uv sync
+uv run buildtools/build_extensions.py
+
+#测试单个实例
+uv run pyvrp instance/CVRP/X-n1001-k43.vrp --seed 42 --max_runtime 60
+uv run pyvrp instance/VRPTW/C1_10_10.vrp --seed 42 --max_runtime 60
+```
+
+---
+
+## 参数配置
+
+| 机制 | 参数 | 默认值 | 说明 |
+|------|------|--------|------|
+| TSLA | `K` | 10 | 第一阶段恶化移动候选列表容量 |
+| TSLA | `k_neigh` | 10 | 第二阶段搜索每节点最近邻数量 |
+| TSLA | `T_tsla` | 2000 | 连续无改进迭代触发阈值 |
+| UCB | `c` (exploration) | 1.414 | 探索系数（√2） |
+| UCB | `alpha` (EWMA) | 0.1 | 指数加权移动平均学习率 |
+
+可在构造`LocalSearch`对象时通过set方法修改，或通过实验配置文件指定。
+
+---
+
+本工作基于以下开源项目与基准测试集：
+
+- [PyVRP](https://github.com/PyVRP/PyVRP) – 高性能车辆路径问题求解器（MIT License）
+- [CVRPLIB](http://vrp.atd-lab.inf.puc-rio.br/) – CVRP标准实例集（Uchoa et al., 2017）
+- Gehring & Homberger VRPTW实例集（1999）
+
+---
+
+## 联系与问题
+
+- 作者：廖奎
+- 邮箱：U202215494@hust.edu.cn
+欢迎通过邮件交流讨论。
+
+---
+
+**备注**：由于本工作遵循单一变量独立验证原则，仓库中各改进机制（TSLA / 2-opt / 2-opt\* / UCB）均可单独编译启用，未进行多机制联合集成。
