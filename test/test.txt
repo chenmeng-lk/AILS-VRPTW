@@ -1,0 +1,18 @@
+pip install pandas numpy matplotlib scipy
+
+python3 analyze_results.py \
+    --baseline baseline.csv \
+    --tsla TSLA.csv \
+    --two_opt 2opt.csv \
+    --two_opt_star 2optStar.csv \
+    --two_opt_and_star 2opt2optStar.csv \
+    --ucb UCB.csv \
+    --names baseline TSLA 2opt 2optStar 2optAnd2optStar UCB \
+    --out results.txt
+
+python3 plot_cdf.py \
+    --baseline baseline.csv \
+    --improvements TSLA.csv 2opt.csv 2optStar.csv 2opt2optStar.csv UCB.csv \
+    --names TSLA 2opt 2optStar 2optAnd2optStar UCB \
+    --output cdf_curves.png \
+    --xmin -0.3 --xmax 0.3
